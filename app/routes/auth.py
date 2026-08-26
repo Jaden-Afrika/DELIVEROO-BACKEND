@@ -61,6 +61,7 @@ def logout():
 @auth_bp.route("/me", methods=["GET"])
 @auth_required
 def me():
+    from app.extensions import db
     from app.models.user import User
-    user = User.query.get(int(get_jwt_identity()))
+    user = db.session.get(User, int(get_jwt_identity()))
     return jsonify({"user": user.to_dict()}), 200
