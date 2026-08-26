@@ -47,7 +47,7 @@ class Parcel(db.Model):
 
     def to_dict(self):
         owner = self.customer
-        return {
+        result = {
             "id": self.id,
             "trackingNumber": self.tracking_number,
             "pickupLocation": self.pickup_location,
@@ -55,7 +55,9 @@ class Parcel(db.Model):
             "weightCategory": self.weight_category.value,
             "weight": self._weight_label(),
             "distanceKm": float(self.distance_km) if self.distance_km else None,
+            "estimatedTravelTime": self._estimated_travel_minutes(),
             "price": float(self.quoted_price) if self.quoted_price else None,
+            "currency": self.currency,
             "status": self.status.value,
             "currentLocation": self.current_location,
             "createdBy": str(self.customer_id),
@@ -64,6 +66,19 @@ class Parcel(db.Model):
             "createdAt": self.created_at.isoformat() if self.created_at else None,
             "dateCreated": self.created_at.isoformat() if self.created_at else None,
         }
+        if self.cancelled_at:
+            result["cancelledAt"] = self.cancelled_at.isoformat()
+        if self.delivered_at:
+            result["deliveredAt"] = self.delivered_at.isoformat()
+        return result
+
+    def _estimated_travel_minutes(self):
+        if self.distance_km is None:
+            return None
+        distance = float(self.distance_km)
+        avg_speed_kmh = 40.0
+        minutes = (distance / avg_speed_kmh) * 60
+        return round(minutes)
 
     def _weight_label(self):
         labels = {

@@ -50,11 +50,11 @@ class TestCancelParcel:
         assert resp.status_code == 200
         assert resp.get_json()["status"] == "cancelled"
 
-    def test_cancel_other_users_parcel(self, client, auth_header, admin_header, seed_pricing_rules, seed_users):
+    def test_cancel_other_users_parcel(self, client, auth_header, other_header, seed_pricing_rules, seed_users):
         create_resp = client.post("/parcels", headers=auth_header, json={
             "pickupLocation": "A", "destination": "B",
             "weightCategory": "light", "distanceKm": 5,
         })
         parcel_id = create_resp.get_json()["id"]
-        resp = client.patch(f"/parcels/{parcel_id}/cancel", headers=admin_header)
+        resp = client.patch(f"/parcels/{parcel_id}/cancel", headers=other_header)
         assert resp.status_code == 404

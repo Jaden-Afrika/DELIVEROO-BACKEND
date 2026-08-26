@@ -55,7 +55,19 @@ def seed_users(db_session):
 
     user = create_user(full_name="Test User", email="test@example.com", password="password123", role=UserRole.user)
     admin = create_user(full_name="Test Admin", email="admin@example.com", password="password123", role=UserRole.admin)
-    return {"user": user, "admin": admin}
+    other = create_user(full_name="Other User", email="other@example.com", password="password123", role=UserRole.user)
+    return {"user": user, "admin": admin, "other": other}
+
+
+@pytest.fixture
+def other_token(client, seed_users):
+    resp = client.post("/auth/login", json={"email": "other@example.com", "password": "password123"})
+    return resp.get_json()["access_token"]
+
+
+@pytest.fixture
+def other_header(other_token):
+    return {"Authorization": f"Bearer {other_token}"}
 
 
 @pytest.fixture
