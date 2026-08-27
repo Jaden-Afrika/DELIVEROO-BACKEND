@@ -2,30 +2,30 @@ from decimal import Decimal
 from datetime import datetime, timezone
 from typing import Optional
 
-from app.extensions import db
-from app.models.enums import WeightCategory
+from django.db.models import Q
+
 from app.models.pricing_rule import PricingRule
 
 
-def get_active_pricing_rule(
-    weight_category: WeightCategory, session=None
-) -> Optional[PricingRule]:
-    session = session or db.session
+def get_active_pricing_rule(weight_category) -> Optional[PricingRule]:
+    if isinstance(weight_category, str):
+        weight_category = weight_category
+    else:
+        weight_category = weight_category.value if hasattr(weight_category, "value") else weight_category
     now = datetime.now(timezone.utc)
     return (
-        session.query(PricingRule)
-        .filter(
-            PricingRule.weight_category == weight_category,
-            PricingRule.is_active == True,  # noqa: E712
-            PricingRule.effective_from <= now,
-            db.or_(PricingRule.expires_at == None, PricingRule.expires_at > now),  # noqa: E712
+        PricingRule.objects.filter(
+            weight_category=weight_category,
+            is_active=True,
+            effective_from__lte=now,
         )
-        .order_by(PricingRule.effective_from.desc())
+        .filter(Q(expires_at__isnull=True) | Q(expires_at__gt=now))
+        .order_by("-effective_from")
         .first()
     )
 
 
-def calculate_price(weight_category: WeightCategory, distance_km: float) -> dict:
+def calculate_price(weight_category, distance_km: float) -> dict:
     rule = get_active_pricing_rule(weight_category)
     if rule is None:
         return {

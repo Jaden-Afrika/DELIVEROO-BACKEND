@@ -1,28 +1,32 @@
 from datetime import datetime, timezone
+from app.utils import utcnow
 
-from app.extensions import db
+from django.db import models
+
 from app.models.enums import PaymentStatus
 
 
-class Payment(db.Model):
-    __tablename__ = "payments"
+class Payment(models.Model):
+    parcel = models.ForeignKey(
+        "app.Parcel", on_delete=models.CASCADE, db_column="parcel_id", related_name="payments"
+    )
+    customer = models.ForeignKey(
+        "app.User", on_delete=models.CASCADE, db_column="customer_id", related_name="payments"
+    )
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    currency = models.CharField(max_length=3, default="KES")
+    payment_method = models.CharField(max_length=50)
+    provider = models.CharField(max_length=100, null=True, blank=True)
+    provider_transaction_id = models.CharField(max_length=255, unique=True, null=True, blank=True)
+    payment_status = models.CharField(
+        max_length=20,
+        choices=[(s.value, s.name) for s in PaymentStatus],
+        default=PaymentStatus.pending.value,
+    )
+    paid_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(default=utcnow)
+    updated_at = models.DateTimeField(default=utcnow)
 
-    id = db.Column(db.Integer, primary_key=True)
-    parcel_id = db.Column(db.Integer, db.ForeignKey("parcels.id"), nullable=False)
-    customer_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
-    amount = db.Column(db.Numeric(12, 2), nullable=False)
-    currency = db.Column(db.String(3), nullable=False, default="KES")
-    payment_method = db.Column(db.String(50), nullable=False)
-    provider = db.Column(db.String(100), nullable=True)
-    provider_transaction_id = db.Column(db.String(255), nullable=True, unique=True)
-    payment_status = db.Column(db.Enum(PaymentStatus), nullable=False, default=PaymentStatus.pending)
-    paid_at = db.Column(db.DateTime(timezone=True), nullable=True)
-    created_at = db.Column(
-        db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
-    )
-    updated_at = db.Column(
-        db.DateTime(timezone=True),
-        nullable=False,
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
-    )
+    class Meta:
+        app_label = "app"
+        db_table = "payments"

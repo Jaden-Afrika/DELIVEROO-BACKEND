@@ -1,4 +1,4 @@
-from app.models.user import User
+from app.models.user import User, UserManager
 from app.models.driver import Driver
 from app.models.address import Address
 from app.models.pricing_rule import PricingRule
@@ -18,6 +18,7 @@ from app.models.enums import (
 
 __all__ = [
     "User",
+    "UserManager",
     "Driver",
     "Address",
     "PricingRule",

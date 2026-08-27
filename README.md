@@ -1,6 +1,6 @@
 # Deliveroo Backend
 
-Flask + PostgreSQL API for the Deliveroo courier app.
+Django (DRF) + PostgreSQL API for the Deliveroo courier app.
 
 ## Setup
 
@@ -20,15 +20,14 @@ docker compose up -d
 ### Migrate & Seed
 
 ```bash
-flask db migrate -m "initial migration"
-flask db upgrade
+python manage.py migrate
 python -m scripts.seed
 ```
 
 ### Run
 
 ```bash
-flask run
+python manage.py runserver 0.0.0.0:5000
 ```
 
 Visit `http://localhost:5000/` — returns `{"status": "ok", "service": "deliveroo-backend"}`.
@@ -55,18 +54,22 @@ pytest -v
 ## Architecture
 
 ```
-app.py                  # Flask entry point, create_app factory
-app/
-  config.py             # Config classes
-  extensions.py         # db, migrate, jwt, cors singletons
-  errors.py             # Error handlers
-  models/               # SQLAlchemy models
-  schemas/              # Marshmallow request/response schemas
-  routes/               # Blueprint route handlers
-  services/             # Business logic & adapter interfaces
-tests/                  # Pytest suite
-scripts/seed.py         # Idempotent seed script
-migrations/             # Flask-Migrate / Alembic
+manage.py                # Django management entry point
+config/
+  settings.py            # Django settings
+  test_settings.py       # Settings for the test suite (SQLite)
+  urls.py                # Root URL configuration
+  wsgi.py                # WSGI application
+app/                     # Django app (replaces the old Flask app package)
+  models/                # Django models (users, parcels, addresses, ...)
+  serializers.py         # DRF request/response serializers
+  views.py               # API views
+  urls.py                # URL routes
+  exceptions.py          # Custom exception handler & error shapes
+  services/              # Business logic & adapter interfaces
+tests/                   # Pytest suite
+scripts/seed.py          # Idempotent seed script
+app/migrations/          # Django migrations
 ```
 
 ## API Endpoints

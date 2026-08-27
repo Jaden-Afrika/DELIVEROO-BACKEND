@@ -9,4 +9,6 @@ COPY . .
 
 EXPOSE 5000
 
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "wsgi:app"]
+RUN python manage.py collectstatic --noinput || true
+
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "config.wsgi:application"]
