@@ -1,18 +1,23 @@
 from datetime import datetime, timezone
+from app.utils import utcnow
 
-from app.extensions import db
+from django.db import models
 
 
-class Notification(db.Model):
-    __tablename__ = "notifications"
-
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
-    parcel_id = db.Column(db.Integer, db.ForeignKey("parcels.id"), nullable=True)
-    type = db.Column(db.String(100), nullable=False)
-    title = db.Column(db.String(255), nullable=False)
-    message = db.Column(db.Text, nullable=False)
-    read_at = db.Column(db.DateTime(timezone=True), nullable=True)
-    created_at = db.Column(
-        db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
+class Notification(models.Model):
+    user = models.ForeignKey(
+        "app.User", on_delete=models.CASCADE, db_column="user_id", related_name="notifications"
     )
+    parcel = models.ForeignKey(
+        "app.Parcel", on_delete=models.CASCADE, null=True, blank=True,
+        db_column="parcel_id", related_name="notifications",
+    )
+    type = models.CharField(max_length=100)
+    title = models.CharField(max_length=255)
+    message = models.TextField()
+    read_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(default=utcnow)
+
+    class Meta:
+        app_label = "app"
+        db_table = "notifications"

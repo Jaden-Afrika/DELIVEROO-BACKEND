@@ -1,16 +1,18 @@
 from datetime import datetime, timezone
+from app.utils import utcnow
 
-from app.extensions import db
+from django.db import models
 
 
-class TrackingLocation(db.Model):
-    __tablename__ = "tracking_locations"
-
-    id = db.Column(db.Integer, primary_key=True)
-    delivery_id = db.Column(db.Integer, db.ForeignKey("deliveries.id"), nullable=False)
-    latitude = db.Column(db.Numeric(9, 6), nullable=False)
-    longitude = db.Column(db.Numeric(9, 6), nullable=False)
-    location_text = db.Column(db.String(255), nullable=True)
-    recorded_at = db.Column(
-        db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
+class TrackingLocation(models.Model):
+    delivery = models.ForeignKey(
+        "app.Delivery", on_delete=models.CASCADE, db_column="delivery_id", related_name="tracking_locations"
     )
+    latitude = models.DecimalField(max_digits=9, decimal_places=6)
+    longitude = models.DecimalField(max_digits=9, decimal_places=6)
+    location_text = models.CharField(max_length=255, null=True, blank=True)
+    recorded_at = models.DateTimeField(default=utcnow)
+
+    class Meta:
+        app_label = "app"
+        db_table = "tracking_locations"
