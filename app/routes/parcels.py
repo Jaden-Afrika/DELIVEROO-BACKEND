@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, abort
 from flask_jwt_extended import get_jwt_identity
 from marshmallow import ValidationError
 
@@ -13,6 +13,24 @@ from app.routes.auth_decorators import auth_required
 from app.services.pricing import calculate_price
 
 parcels_bp = Blueprint("parcels", __name__)
+
+
+def _get_own_parcel_or_404(parcel_id):
+    """Look up a parcel, but only if it belongs to the current user.
+    Returns 404 (not 403) for someone else's parcel, matching the
+    existing test's expectation and avoiding leaking that the id exists."""
+    user_id = int(get_jwt_identity())
+    parcel = Parcel.query.filter_by(id=parcel_id, customer_id=user_id).first()
+    if parcel is None:
+        abort(404)
+    return parcel
+
+
+def _require_not_delivered(parcel):
+    """Cancel/change-destination are only allowed before a parcel is
+    delivered — enforced here, not just in the frontend UI."""
+    if parcel.status == ParcelStatus.delivered:
+        abort(409, description="Cannot modify a parcel that has already been delivered.")
 
 
 @parcels_bp.route("/me", methods=["GET"])
@@ -54,14 +72,16 @@ def create_parcel():
 @parcels_bp.route("/<int:parcel_id>", methods=["GET"])
 @auth_required
 def get_parcel(parcel_id):
-    parcel = Parcel.query.get_or_404(parcel_id)
+    parcel = _get_own_parcel_or_404(parcel_id)
     return jsonify(parcel.to_dict()), 200
 
 
 @parcels_bp.route("/<int:parcel_id>/destination", methods=["PATCH"])
 @auth_required
 def update_destination(parcel_id):
-    parcel = Parcel.query.get_or_404(parcel_id)
+    parcel = _get_own_parcel_or_404(parcel_id)
+    _require_not_delivered(parcel)
+
     try:
         data = update_destination_request.load(request.get_json())
     except ValidationError as err:
@@ -76,7 +96,9 @@ def update_destination(parcel_id):
 @parcels_bp.route("/<int:parcel_id>/cancel", methods=["PATCH"])
 @auth_required
 def cancel_parcel(parcel_id):
-    parcel = Parcel.query.get_or_404(parcel_id)
+    parcel = _get_own_parcel_or_404(parcel_id)
+    _require_not_delivered(parcel)
+
     parcel.status = ParcelStatus.cancelled
     db.session.commit()
 
