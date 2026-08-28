@@ -1,6 +1,12 @@
+from django.conf import settings
+
 from app.services.geocoding import GeocodingService, StubGeocodingService
 from app.services.routing import RoutingService, StubRoutingService
-from app.services.notifications import NotificationService, StubNotificationService
+from app.services.notifications import (
+    NotificationService,
+    StubNotificationService,
+    EmailNotificationService,
+)
 from app.services.payments import PaymentService, StubPaymentService
 from app.services.storage import StorageService, LocalStorageService
 
@@ -28,7 +34,11 @@ def get_routing_service() -> RoutingService:
 def get_notification_service() -> NotificationService:
     global _notification_service
     if _notification_service is None:
-        _notification_service = StubNotificationService()
+        provider = getattr(settings, "NOTIFICATION_PROVIDER", "stub")
+        if provider == "email":
+            _notification_service = EmailNotificationService()
+        else:
+            _notification_service = StubNotificationService()
     return _notification_service
 
 

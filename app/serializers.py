@@ -33,7 +33,7 @@ class UpdateDestinationRequestSerializer(serializers.Serializer):
 
 
 class AdminUpdateStatusRequestSerializer(serializers.Serializer):
-    status = serializers.ChoiceField(choices=["pending", "in_transit", "delivered"])
+    status = serializers.ChoiceField(choices=["pending", "assigned", "in_transit", "delivered"])
 
 
 class AdminUpdateLocationRequestSerializer(serializers.Serializer):

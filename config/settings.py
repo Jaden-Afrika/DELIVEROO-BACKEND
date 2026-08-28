@@ -119,3 +119,22 @@ GEOCODING_PROVIDER = os.environ.get("GEOCODING_PROVIDER", "stub")
 ROUTING_PROVIDER = os.environ.get("ROUTING_PROVIDER", "stub")
 PAYMENT_PROVIDER = os.environ.get("PAYMENT_PROVIDER", "stub")
 STORAGE_PROVIDER = os.environ.get("STORAGE_PROVIDER", "local")
+
+# Set NOTIFICATION_PROVIDER=email to send real emails when an admin changes
+# a parcel's status or current location. Defaults to "stub" so local dev
+# and tests never depend on outbound network access.
+NOTIFICATION_PROVIDER = os.environ.get("NOTIFICATION_PROVIDER", "stub")
+
+# Email delivery. Defaults to Django's console backend, which just prints
+# the message to the server log - safe for local development with zero
+# setup. Point EMAIL_BACKEND at Django's SMTP backend and fill in the
+# EMAIL_HOST_* settings below to send real mail in production.
+EMAIL_BACKEND = os.environ.get(
+    "EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend"
+)
+EMAIL_HOST = os.environ.get("EMAIL_HOST", "localhost")
+EMAIL_PORT = int(os.environ.get("EMAIL_PORT", 587))
+EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
+EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "1") == "1"
+DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "no-reply@deliveroo.local")

@@ -19,7 +19,7 @@ from app.serializers import (
 )
 from app.services.auth import create_user, authenticate_user
 from app.services.pricing import calculate_price
-from app.services import get_geocoding_service, get_routing_service
+from app.services import get_geocoding_service, get_routing_service, get_notification_service
 
 
 def _serialize_validation(errors):
@@ -349,6 +349,8 @@ class AdminUpdateStatusView(APIView):
             return Response(parcel.to_dict(), status=200)
 
         parcel.status = new_status
+        if new_status == ParcelStatus.delivered.value:
+            parcel.delivered_at = datetime.now(timezone.utc)
         parcel.save()
 
         ParcelStatusHistory.objects.create(
@@ -357,6 +359,9 @@ class AdminUpdateStatusView(APIView):
             changed_by_user_id=request.user.id,
             notes=f"Status changed to {new_status} by admin",
         )
+
+        get_notification_service().notify_status_change(parcel, new_status)
+
         return Response(parcel.to_dict(), status=200)
 
 
@@ -377,6 +382,10 @@ class AdminUpdateLocationView(APIView):
         if not serializer.is_valid():
             raise ValidationError422(_serialize_validation(serializer.errors))
 
-        parcel.current_location = serializer.validated_data["currentLocation"]
+        new_location = serializer.validated_data["currentLocation"]
+        parcel.current_location = new_location
         parcel.save()
+
+        get_notification_service().notify_location_change(parcel, new_location)
+
         return Response(parcel.to_dict(), status=200)
