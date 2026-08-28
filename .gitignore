@@ -3,6 +3,7 @@ __pycache__/
 *.pyc
 .env
 instance/
+db.sqlite3
 uploads/
 *.log
 .DS_Store

@@ -11,6 +11,19 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
+### Django authentication API
+
+The custom Django `accounts` app is configured with email-based login and JWT
+authentication. Apply its migrations and start the Django API with:
+
+```bash
+python manage.py migrate
+python manage.py runserver 8000
+```
+
+Authentication endpoints are available under `/api/auth/` (`signup`, `login`,
+`token/refresh`, `logout`, and `me`).
+
 ### Database (Docker)
 
 ```bash
