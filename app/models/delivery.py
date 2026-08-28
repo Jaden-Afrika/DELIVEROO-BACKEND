@@ -1,28 +1,29 @@
 from datetime import datetime, timezone
+from app.utils import utcnow
 
-from app.extensions import db
+from django.db import models
 
 
-class Delivery(db.Model):
-    __tablename__ = "deliveries"
-
-    id = db.Column(db.Integer, primary_key=True)
-    parcel_id = db.Column(db.Integer, db.ForeignKey("parcels.id"), nullable=False, unique=True)
-    driver_id = db.Column(db.Integer, db.ForeignKey("drivers.id"), nullable=True)
-    assigned_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
-    assigned_at = db.Column(db.DateTime(timezone=True), nullable=True)
-    picked_up_at = db.Column(db.DateTime(timezone=True), nullable=True)
-    delivered_at = db.Column(db.DateTime(timezone=True), nullable=True)
-    delivery_notes = db.Column(db.Text, nullable=True)
-    proof_of_delivery_url = db.Column(db.String(1000), nullable=True)
-    created_at = db.Column(
-        db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
+class Delivery(models.Model):
+    parcel = models.OneToOneField(
+        "app.Parcel", on_delete=models.CASCADE, db_column="parcel_id", related_name="delivery"
     )
-    updated_at = db.Column(
-        db.DateTime(timezone=True),
-        nullable=False,
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+    driver = models.ForeignKey(
+        "app.Driver", on_delete=models.SET_NULL, null=True, blank=True,
+        db_column="driver_id", related_name="deliveries",
     )
+    assigned_by_user = models.ForeignKey(
+        "app.User", on_delete=models.SET_NULL, null=True, blank=True,
+        db_column="assigned_by_user_id", related_name="+",
+    )
+    assigned_at = models.DateTimeField(null=True, blank=True)
+    picked_up_at = models.DateTimeField(null=True, blank=True)
+    delivered_at = models.DateTimeField(null=True, blank=True)
+    delivery_notes = models.TextField(null=True, blank=True)
+    proof_of_delivery_url = models.CharField(max_length=1000, null=True, blank=True)
+    created_at = models.DateTimeField(default=utcnow)
+    updated_at = models.DateTimeField(default=utcnow)
 
-    tracking_locations = db.relationship("TrackingLocation", backref="delivery", lazy=True)
+    class Meta:
+        app_label = "app"
+        db_table = "deliveries"

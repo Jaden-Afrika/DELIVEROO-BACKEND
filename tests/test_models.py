@@ -9,8 +9,12 @@ from app.models.enums import (
 )
 
 
+def _field_names(model):
+    return {f.name for f in model._meta.get_fields()}
+
+
 def test_user_model_fields():
-    cols = {c.name for c in User.__table__.columns}
+    cols = _field_names(User)
     assert "id" in cols
     assert "full_name" in cols
     assert "email" in cols
@@ -22,10 +26,7 @@ def test_user_model_fields():
 
 
 def test_user_to_dict():
-    from app.extensions import db
-    from datetime import datetime, timezone
-    user = User(id=1, full_name="Test", email="t@t.com", role=UserRole.user, is_active=True,
-                created_at=datetime.now(timezone.utc), updated_at=datetime.now(timezone.utc))
+    user = User(id=1, full_name="Test", email="t@t.com", role=UserRole.user.value, is_active=True)
     d = user.to_dict()
     assert d["name"] == "Test"
     assert d["role"] == "user"
@@ -34,9 +35,9 @@ def test_user_to_dict():
 
 
 def test_parcel_model_fields():
-    cols = {c.name for c in Parcel.__table__.columns}
+    cols = _field_names(Parcel)
     assert "tracking_number" in cols
-    assert "customer_id" in cols
+    assert "customer" in cols
     assert "pickup_location" in cols
     assert "destination" in cols
     assert "weight_category" in cols
@@ -47,13 +48,10 @@ def test_parcel_model_fields():
 
 
 def test_parcel_to_dict_fields():
-    from app.extensions import db
-    from datetime import datetime, timezone
     parcel = Parcel(
         id=1, customer_id=1, pickup_location="A", destination="B",
-        weight_category=WeightCategory.medium, distance_km=10, quoted_price=350,
-        currency="KES", status=ParcelStatus.pending,
-        created_at=datetime.now(timezone.utc), updated_at=datetime.now(timezone.utc),
+        weight_category=WeightCategory.medium.value, distance_km=10, quoted_price=350,
+        currency="KES", status=ParcelStatus.pending.value,
     )
     d = parcel.to_dict()
     assert "pickupLocation" in d

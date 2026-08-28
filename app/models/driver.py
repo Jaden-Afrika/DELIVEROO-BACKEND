@@ -1,31 +1,27 @@
 from datetime import datetime, timezone
+from app.utils import utcnow
 
-from app.extensions import db
+from django.db import models
+
 from app.models.enums import DriverAvailabilityStatus
 
 
-class Driver(db.Model):
-    __tablename__ = "drivers"
+class Driver(models.Model):
+    user = models.OneToOneField(
+        "app.User", on_delete=models.CASCADE, db_column="user_id", related_name="driver_profile"
+    )
+    vehicle_type = models.CharField(max_length=100)
+    vehicle_registration = models.CharField(max_length=100)
+    licence_number = models.CharField(max_length=100)
+    availability_status = models.CharField(
+        max_length=20,
+        choices=[(s.value, s.name) for s in DriverAvailabilityStatus],
+        default=DriverAvailabilityStatus.offline.value,
+    )
+    is_verified = models.BooleanField(default=False)
+    created_at = models.DateTimeField(default=utcnow)
+    updated_at = models.DateTimeField(default=utcnow)
 
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, unique=True)
-    vehicle_type = db.Column(db.String(100), nullable=False)
-    vehicle_registration = db.Column(db.String(100), nullable=False)
-    licence_number = db.Column(db.String(100), nullable=False)
-    availability_status = db.Column(
-        db.Enum(DriverAvailabilityStatus),
-        nullable=False,
-        default=DriverAvailabilityStatus.offline,
-    )
-    is_verified = db.Column(db.Boolean, nullable=False, default=False)
-    created_at = db.Column(
-        db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
-    )
-    updated_at = db.Column(
-        db.DateTime(timezone=True),
-        nullable=False,
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
-    )
-
-    deliveries = db.relationship("Delivery", backref="driver", lazy=True)
+    class Meta:
+        app_label = "app"
+        db_table = "drivers"

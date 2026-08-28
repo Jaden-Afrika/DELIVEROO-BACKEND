@@ -1,19 +1,29 @@
-def test_route_registration(app):
-    rules = {rule.rule for rule in app.url_map.iter_rules()}
-    assert "/auth/signup" in rules
-    assert "/auth/login" in rules
-    assert "/auth/logout" in rules
-    assert "/auth/me" in rules
-    assert "/parcels/me" in rules
-    assert "/parcels" in rules
-    assert "/parcels/<int:parcel_id>" in rules
-    assert "/parcels/<int:parcel_id>/cancel" in rules
-    assert "/parcels/<int:parcel_id>/destination" in rules
-    assert "/parcels/<int:parcel_id>/status-history" in rules
-    assert "/parcels/<int:parcel_id>/tracking" in rules
-    assert "/admin/parcels" in rules
-    assert "/admin/parcels/<int:parcel_id>/status" in rules
-    assert "/admin/parcels/<int:parcel_id>/location" in rules
-    assert "/" in rules
-    assert "/health" in rules
-    assert "/openapi.json" in rules
+from django.urls import resolve
+
+
+def _resolves(path):
+    try:
+        resolve(path)
+        return True
+    except Exception:
+        return False
+
+
+def test_route_registration():
+    assert _resolves("/auth/signup")
+    assert _resolves("/auth/login")
+    assert _resolves("/auth/logout")
+    assert _resolves("/auth/me")
+    assert _resolves("/parcels/me")
+    assert _resolves("/parcels")
+    assert _resolves("/parcels/1")
+    assert _resolves("/parcels/1/cancel")
+    assert _resolves("/parcels/1/destination")
+    assert _resolves("/parcels/1/status-history")
+    assert _resolves("/parcels/1/tracking")
+    assert _resolves("/admin/parcels")
+    assert _resolves("/admin/parcels/1/status")
+    assert _resolves("/admin/parcels/1/location")
+    assert _resolves("/")
+    assert _resolves("/health")
+    assert _resolves("/openapi.json")
