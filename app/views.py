@@ -116,6 +116,23 @@ class CreateParcelView(APIView):
             currency=pricing["currency"],
             description=data.get("description"),
         )
+
+        # Best-effort geocoding so the map has pickup/destination coordinates
+        # to plot from the moment the parcel is created. A geocoding failure
+        # should never block parcel creation, so this stays non-fatal.
+        try:
+            geocoder = get_geocoding_service()
+            pickup_geo = geocoder.geocode(data["pickupLocation"])
+            dest_geo = geocoder.geocode(data["destination"])
+            if pickup_geo:
+                parcel.pickup_latitude = pickup_geo.latitude
+                parcel.pickup_longitude = pickup_geo.longitude
+            if dest_geo:
+                parcel.destination_latitude = dest_geo.latitude
+                parcel.destination_longitude = dest_geo.longitude
+        except Exception:
+            pass
+
         parcel.save()
 
         ParcelStatusHistory.objects.create(
@@ -200,12 +217,15 @@ class UpdateDestinationView(APIView):
                 )
                 if route:
                     parcel.distance_km = route.distance_km
+                    parcel.duration_minutes = route.estimated_duration_minutes
                     pricing = calculate_price(parcel.weight_category, route.distance_km)
                     parcel.quoted_price = pricing["total"]
                     parcel.currency = pricing["currency"]
 
             parcel.destination = new_destination
             if dest_geo:
+                parcel.destination_latitude = dest_geo.latitude
+                parcel.destination_longitude = dest_geo.longitude
                 parcel.current_location = dest_geo.formatted_address
 
             parcel.save()

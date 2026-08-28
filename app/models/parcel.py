@@ -34,7 +34,12 @@ class Parcel(models.Model):
     description = models.TextField(null=True, blank=True)
     pickup_location = models.CharField(max_length=255)
     destination = models.CharField(max_length=255)
+    pickup_latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    pickup_longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    destination_latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    destination_longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     distance_km = models.DecimalField(max_digits=10, decimal_places=2)
+    duration_minutes = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     quoted_price = models.DecimalField(max_digits=12, decimal_places=2)
     final_price = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     currency = models.CharField(max_length=3, default="KES")
@@ -68,6 +73,10 @@ class Parcel(models.Model):
             "trackingNumber": self.tracking_number,
             "pickupLocation": self.pickup_location,
             "destination": self.destination,
+            "pickupLatitude": float(self.pickup_latitude) if self.pickup_latitude is not None else None,
+            "pickupLongitude": float(self.pickup_longitude) if self.pickup_longitude is not None else None,
+            "destinationLatitude": float(self.destination_latitude) if self.destination_latitude is not None else None,
+            "destinationLongitude": float(self.destination_longitude) if self.destination_longitude is not None else None,
             "weightCategory": self.weight_category,
             "weight": self._weight_label(),
             "distanceKm": float(self.distance_km) if self.distance_km is not None else None,
@@ -97,6 +106,8 @@ class Parcel(models.Model):
         return value.astimezone(timezone.utc).isoformat()
 
     def _estimated_travel_minutes(self):
+        if self.duration_minutes is not None:
+            return round(float(self.duration_minutes))
         if self.distance_km is None:
             return None
         distance = float(self.distance_km)
