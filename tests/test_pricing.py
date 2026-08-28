@@ -1,4 +1,3 @@
-import pytest
 from app.services.pricing import calculate_price, get_active_pricing_rule
 from app.models.enums import WeightCategory
 
@@ -24,7 +23,7 @@ def test_calculate_price_heavy(seed_pricing_rules):
     assert result["total"] == 900  # 700 + (40 * 5)
 
 
-def test_calculate_price_no_rules(db_session):
+def test_calculate_price_no_rules(db):
     result = calculate_price(WeightCategory.light, 10.0)
     assert result["rule_found"] is False
     assert result["total"] == 0
@@ -36,6 +35,6 @@ def test_get_active_pricing_rule(seed_pricing_rules):
     assert rule.base_fee == 150
 
 
-def test_get_active_pricing_rule_not_found(db_session):
+def test_get_active_pricing_rule_not_found(db):
     rule = get_active_pricing_rule(WeightCategory.heavy)
     assert rule is None

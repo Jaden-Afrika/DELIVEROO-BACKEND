@@ -1,23 +1,22 @@
-from werkzeug.security import generate_password_hash, check_password_hash
-
-from app.extensions import db
 from app.models.user import User
+from app.models.enums import UserRole
 
 
 def create_user(full_name: str, email: str, password: str, role="user") -> User:
-    user = User(
-        full_name=full_name,
+    user = User.objects.create_user(
         email=email,
-        password_hash=generate_password_hash(password),
-        role=role,
+        password=password,
+        full_name=full_name,
+        role=role if role in (UserRole.user.value, UserRole.admin.value) else UserRole.user.value,
     )
-    db.session.add(user)
-    db.session.commit()
     return user
 
 
 def authenticate_user(email: str, password: str):
-    user = User.query.filter_by(email=email).first()
-    if user and check_password_hash(user.password_hash, password):
+    try:
+        user = User.objects.get(email=email)
+    except User.DoesNotExist:
+        return None
+    if user.check_password(password):
         return user
     return None
