@@ -74,6 +74,15 @@ app/migrations/          # Django migrations
 
 ## API Endpoints
 
+### API documentation (Swagger/OpenAPI)
+
+Generated from the code via drf-spectacular:
+
+- `/api/docs/` — interactive Swagger UI
+- `/api/redoc/` — Redoc UI
+- `/api/schema/` — raw OpenAPI schema (YAML)
+- `/api/schema/openapi.json` — raw OpenAPI schema (JSON)
+
 ### Auth
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
