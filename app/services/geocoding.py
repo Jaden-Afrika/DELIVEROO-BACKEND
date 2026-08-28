@@ -1,10 +1,11 @@
 import logging
+import threading
+import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Optional
 
 import requests
-from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
@@ -33,44 +34,64 @@ class StubGeocodingService(GeocodingService):
         )
 
 
-class GoogleGeocodingService(GeocodingService):
-    """Real geocoding via the Google Geocoding API.
+class OSMGeocodingService(GeocodingService):
+    """Best-effort address geocoding through OpenStreetMap's Nominatim API.
 
-    Requires GOOGLE_MAPS_API_KEY to be set. Callers already treat a
-    failed/None geocode as non-fatal (see views.py), so this returns
-    None on any error rather than raising - a bad address or a network
-    hiccup should never block parcel creation.
+    Nominatim permits at most one request per second. The application uses a
+    singleton service through ``get_geocoding_service()``, and this instance
+    serializes and spaces its requests accordingly. Errors remain non-fatal so
+    parcel creation continues when the public service is unavailable.
     """
 
-    ENDPOINT = "https://maps.googleapis.com/maps/api/geocode/json"
+    ENDPOINT = "https://nominatim.openstreetmap.org/search"
+    USER_AGENT = "deliveroo-backend/1.0 (OpenStreetMap geocoding)"
+    MIN_REQUEST_INTERVAL_SECONDS = 1.0
+
+    def __init__(self):
+        self._last_request_at: Optional[float] = None
+        self._rate_limit_lock = threading.Lock()
+
+    def _respect_rate_limit(self) -> None:
+        """Wait until this service's next request is within Nominatim's limit."""
+        with self._rate_limit_lock:
+            if self._last_request_at is not None:
+                elapsed = time.monotonic() - self._last_request_at
+                delay = self.MIN_REQUEST_INTERVAL_SECONDS - elapsed
+                if delay > 0:
+                    time.sleep(delay)
+            self._last_request_at = time.monotonic()
 
     def geocode(self, address_text: str) -> Optional[GeocodingResult]:
-        api_key = getattr(settings, "GOOGLE_MAPS_API_KEY", "")
-        if not api_key:
-            logger.warning("GOOGLE_MAPS_API_KEY is not set; cannot geocode '%s'", address_text)
+        if not address_text or not address_text.strip():
             return None
+
         try:
-            resp = requests.get(
+            self._respect_rate_limit()
+            response = requests.get(
                 self.ENDPOINT,
-                params={"address": address_text, "key": api_key},
+                params={"q": address_text, "format": "json", "limit": 1},
+                headers={"User-Agent": self.USER_AGENT},
                 timeout=5,
             )
-            resp.raise_for_status()
-            data = resp.json()
-        except requests.RequestException as exc:
-            logger.warning("Geocoding request failed for '%s': %s", address_text, exc)
-            return None
+            response.raise_for_status()
+            results = response.json()
+            if not results:
+                logger.warning("Nominatim returned no result for '%s'", address_text)
+                return None
 
-        if data.get("status") != "OK" or not data.get("results"):
-            logger.warning(
-                "Geocoding failed for '%s': status=%s", address_text, data.get("status")
+            result = results[0]
+            return GeocodingResult(
+                latitude=float(result["lat"]),
+                longitude=float(result["lon"]),
+                formatted_address=result.get("display_name", address_text),
             )
+        except (
+            requests.RequestException,
+            ValueError,
+            KeyError,
+            TypeError,
+            IndexError,
+            AttributeError,
+        ) as exc:
+            logger.warning("Nominatim geocoding failed for '%s': %s", address_text, exc)
             return None
-
-        result = data["results"][0]
-        location = result["geometry"]["location"]
-        return GeocodingResult(
-            latitude=location["lat"],
-            longitude=location["lng"],
-            formatted_address=result.get("formatted_address", address_text),
-        )
