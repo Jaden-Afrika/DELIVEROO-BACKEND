@@ -1,0 +1,369 @@
+From d00f20c7b973c73de46c51948bb995bc46925c8e Mon Sep 17 00:00:00 2001
+From: Deliveroo Backend <dev@deliveroo.local>
+Date: Fri, 28 Aug 2026 05:54:56 +0000
+Subject: [PATCH 5/6] Add real Google Maps geocoding and routing providers
+
+Geocoding and routing have been running on fixed stub data this whole
+time (every address geocodes to the same point in Nairobi, every route
+is a flat 10km/25min) - fine for tests, but not something you can ship
+real distances or map markers from.
+
+- Add GoogleGeocodingService (Geocoding API) and GoogleRoutingService
+  (Directions API), selected via GEOCODING_PROVIDER=google and
+  ROUTING_PROVIDER=google respectively - same toggle pattern already
+  used for notifications
+- Both fail soft: a missing API key, a bad address, or a network error
+  all return None rather than raising, since the calling code already
+  treats a failed geocode/route as non-fatal
+- Add GOOGLE_MAPS_API_KEY setting (server-side key, separate from the
+  frontend's browser-restricted VITE_GOOGLE_MAPS_API_KEY - needs
+  Geocoding API and Directions API enabled, and should be IP-restricted
+  rather than referrer-restricted)
+- Add requests to requirements.txt
+- Document all of the above in .env.example
+- Add tests against mocked HTTP responses so the parsing logic is
+  covered without needing real network access or a live API key
+
+Defaults stay on the stub providers, so nothing changes for local dev
+or CI until GOOGLE_MAPS_API_KEY and the provider toggles are actually
+set.
+---
+ .env.example                  | 19 ++++++++
+ app/services/__init__.py      | 16 +++++--
+ app/services/geocoding.py     | 49 ++++++++++++++++++++
+ app/services/routing.py       | 52 +++++++++++++++++++++
+ config/settings.py            |  8 ++++
+ requirements.txt              |  1 +
+ tests/test_google_services.py | 85 +++++++++++++++++++++++++++++++++++
+ 7 files changed, 226 insertions(+), 4 deletions(-)
+ create mode 100644 tests/test_google_services.py
+
+diff --git a/.env.example b/.env.example
+index b53cd49..ca37555 100644
+--- a/.env.example
++++ b/.env.example
+@@ -21,3 +21,22 @@ GEOCODING_PROVIDER=stub
+ ROUTING_PROVIDER=stub
+ PAYMENT_PROVIDER=stub
+ STORAGE_PROVIDER=local
++
++# Set GEOCODING_PROVIDER=google and/or ROUTING_PROVIDER=google to use
++# real Google Maps data instead of the fixed stub coordinates. Needs a
++# server-side key (IP-restricted, Geocoding API + Directions API
++# enabled) - not the same key as the frontend's browser-restricted
++# VITE_GOOGLE_MAPS_API_KEY.
++GOOGLE_MAPS_API_KEY=
++
++# Email notifications (sent when admin changes a parcel's status or
++# location). Set NOTIFICATION_PROVIDER=email to actually send; defaults
++# to "stub" so no email setup is required for local dev.
++NOTIFICATION_PROVIDER=stub
++EMAIL_BACKEND=django.core.mail.backends.console.EmailBackend
++EMAIL_HOST=localhost
++EMAIL_PORT=587
++EMAIL_HOST_USER=
++EMAIL_HOST_PASSWORD=
++EMAIL_USE_TLS=1
++DEFAULT_FROM_EMAIL=no-reply@deliveroo.local
+diff --git a/app/services/__init__.py b/app/services/__init__.py
+index 2aabacb..3aec2d7 100644
+--- a/app/services/__init__.py
++++ b/app/services/__init__.py
+@@ -1,7 +1,7 @@
+ from django.conf import settings
+ 
+-from app.services.geocoding import GeocodingService, StubGeocodingService
+-from app.services.routing import RoutingService, StubRoutingService
++from app.services.geocoding import GeocodingService, StubGeocodingService, GoogleGeocodingService
++from app.services.routing import RoutingService, StubRoutingService, GoogleRoutingService
+ from app.services.notifications import (
+     NotificationService,
+     StubNotificationService,
+@@ -20,14 +20,22 @@ _storage_service: StorageService = None
+ def get_geocoding_service() -> GeocodingService:
+     global _geocoding_service
+     if _geocoding_service is None:
+-        _geocoding_service = StubGeocodingService()
++        provider = getattr(settings, "GEOCODING_PROVIDER", "stub")
++        if provider == "google":
++            _geocoding_service = GoogleGeocodingService()
++        else:
++            _geocoding_service = StubGeocodingService()
+     return _geocoding_service
+ 
+ 
+ def get_routing_service() -> RoutingService:
+     global _routing_service
+     if _routing_service is None:
+-        _routing_service = StubRoutingService()
++        provider = getattr(settings, "ROUTING_PROVIDER", "stub")
++        if provider == "google":
++            _routing_service = GoogleRoutingService()
++        else:
++            _routing_service = StubRoutingService()
+     return _routing_service
+ 
+ 
+diff --git a/app/services/geocoding.py b/app/services/geocoding.py
+index e946006..e56b698 100644
+--- a/app/services/geocoding.py
++++ b/app/services/geocoding.py
+@@ -1,7 +1,13 @@
++import logging
+ from abc import ABC, abstractmethod
+ from dataclasses import dataclass
+ from typing import Optional
+ 
++import requests
++from django.conf import settings
++
++logger = logging.getLogger(__name__)
++
+ 
+ @dataclass
+ class GeocodingResult:
+@@ -25,3 +31,46 @@ class StubGeocodingService(GeocodingService):
+             longitude=36.8219,
+             formatted_address=address_text,
+         )
++
++
++class GoogleGeocodingService(GeocodingService):
++    """Real geocoding via the Google Geocoding API.
++
++    Requires GOOGLE_MAPS_API_KEY to be set. Callers already treat a
++    failed/None geocode as non-fatal (see views.py), so this returns
++    None on any error rather than raising - a bad address or a network
++    hiccup should never block parcel creation.
++    """
++
++    ENDPOINT = "https://maps.googleapis.com/maps/api/geocode/json"
++
++    def geocode(self, address_text: str) -> Optional[GeocodingResult]:
++        api_key = getattr(settings, "GOOGLE_MAPS_API_KEY", "")
++        if not api_key:
++            logger.warning("GOOGLE_MAPS_API_KEY is not set; cannot geocode '%s'", address_text)
++            return None
++        try:
++            resp = requests.get(
++                self.ENDPOINT,
++                params={"address": address_text, "key": api_key},
++                timeout=5,
++            )
++            resp.raise_for_status()
++            data = resp.json()
++        except requests.RequestException as exc:
++            logger.warning("Geocoding request failed for '%s': %s", address_text, exc)
++            return None
++
++        if data.get("status") != "OK" or not data.get("results"):
++            logger.warning(
++                "Geocoding failed for '%s': status=%s", address_text, data.get("status")
++            )
++            return None
++
++        result = data["results"][0]
++        location = result["geometry"]["location"]
++        return GeocodingResult(
++            latitude=location["lat"],
++            longitude=location["lng"],
++            formatted_address=result.get("formatted_address", address_text),
++        )
+diff --git a/app/services/routing.py b/app/services/routing.py
+index 31ed132..5ad7f9a 100644
+--- a/app/services/routing.py
++++ b/app/services/routing.py
+@@ -1,7 +1,13 @@
++import logging
+ from abc import ABC, abstractmethod
+ from dataclasses import dataclass
+ from typing import Optional
+ 
++import requests
++from django.conf import settings
++
++logger = logging.getLogger(__name__)
++
+ 
+ @dataclass
+ class RouteResult:
+@@ -26,3 +32,49 @@ class StubRoutingService(RoutingService):
+         dest_lat: float, dest_lng: float,
+     ) -> Optional[RouteResult]:
+         return RouteResult(distance_km=10.0, estimated_duration_minutes=25.0)
++
++
++class GoogleRoutingService(RoutingService):
++    """Real driving distance/duration via the Google Directions API.
++
++    Requires GOOGLE_MAPS_API_KEY to be set. Like GoogleGeocodingService,
++    returns None on any failure rather than raising, since callers treat
++    a missing route as non-fatal and fall back to whatever distance/price
++    was already on the parcel.
++    """
++
++    ENDPOINT = "https://maps.googleapis.com/maps/api/directions/json"
++
++    def get_route(
++        self, origin_lat: float, origin_lng: float,
++        dest_lat: float, dest_lng: float,
++    ) -> Optional[RouteResult]:
++        api_key = getattr(settings, "GOOGLE_MAPS_API_KEY", "")
++        if not api_key:
++            logger.warning("GOOGLE_MAPS_API_KEY is not set; cannot compute route")
++            return None
++        try:
++            resp = requests.get(
++                self.ENDPOINT,
++                params={
++                    "origin": f"{origin_lat},{origin_lng}",
++                    "destination": f"{dest_lat},{dest_lng}",
++                    "key": api_key,
++                },
++                timeout=5,
++            )
++            resp.raise_for_status()
++            data = resp.json()
++        except requests.RequestException as exc:
++            logger.warning("Directions request failed: %s", exc)
++            return None
++
++        if data.get("status") != "OK" or not data.get("routes"):
++            logger.warning("Directions failed: status=%s", data.get("status"))
++            return None
++
++        leg = data["routes"][0]["legs"][0]
++        return RouteResult(
++            distance_km=leg["distance"]["value"] / 1000,
++            estimated_duration_minutes=leg["duration"]["value"] / 60,
++        )
+diff --git a/config/settings.py b/config/settings.py
+index d800838..1bf228f 100644
+--- a/config/settings.py
++++ b/config/settings.py
+@@ -115,11 +115,19 @@ CORS_ALLOWED_ORIGINS = [
+ ] or ["http://localhost:5173"]
+ 
+ # Provider toggles (kept from Flask config)
++# Set to "google" to use real Google Maps geocoding/directions instead of
++# the deterministic stubs - requires GOOGLE_MAPS_API_KEY below.
+ GEOCODING_PROVIDER = os.environ.get("GEOCODING_PROVIDER", "stub")
+ ROUTING_PROVIDER = os.environ.get("ROUTING_PROVIDER", "stub")
+ PAYMENT_PROVIDER = os.environ.get("PAYMENT_PROVIDER", "stub")
+ STORAGE_PROVIDER = os.environ.get("STORAGE_PROVIDER", "local")
+ 
++# Server-side key for the Google Geocoding/Directions APIs. This is
++# separate from the frontend's VITE_GOOGLE_MAPS_API_KEY (that one is a
++# browser-restricted key for rendering the map) - this one should be an
++# IP-restricted server key with Geocoding API and Directions API enabled.
++GOOGLE_MAPS_API_KEY = os.environ.get("GOOGLE_MAPS_API_KEY", "")
++
+ # Set NOTIFICATION_PROVIDER=email to send real emails when an admin changes
+ # a parcel's status or current location. Defaults to "stub" so local dev
+ # and tests never depend on outbound network access.
+diff --git a/requirements.txt b/requirements.txt
+index effbd78..f9bd801 100644
+--- a/requirements.txt
++++ b/requirements.txt
+@@ -6,6 +6,7 @@ django-cors-headers==4.9.0
+ django-filter==26.1
+ psycopg2-binary==2.9.12
+ python-dotenv==1.2.3
++requests==2.32.3
+ gunicorn==26.2.0
+ pytest==8.3.5
+ pytest-django==4.14.0
+diff --git a/tests/test_google_services.py b/tests/test_google_services.py
+new file mode 100644
+index 0000000..20d342f
+--- /dev/null
++++ b/tests/test_google_services.py
+@@ -0,0 +1,85 @@
++from unittest.mock import patch, MagicMock
++
++from django.test import override_settings
++
++from app.services.geocoding import GoogleGeocodingService
++from app.services.routing import GoogleRoutingService
++
++
++def _mock_response(json_data, status_code=200):
++    resp = MagicMock()
++    resp.status_code = status_code
++    resp.json.return_value = json_data
++    resp.raise_for_status.side_effect = None
++    return resp
++
++
++class TestGoogleGeocodingService:
++    @override_settings(GOOGLE_MAPS_API_KEY="")
++    def test_returns_none_without_api_key(self):
++        svc = GoogleGeocodingService()
++        assert svc.geocode("Nairobi") is None
++
++    @override_settings(GOOGLE_MAPS_API_KEY="test-key")
++    @patch("app.services.geocoding.requests.get")
++    def test_parses_successful_response(self, mock_get):
++        mock_get.return_value = _mock_response({
++            "status": "OK",
++            "results": [{
++                "formatted_address": "Nairobi, Kenya",
++                "geometry": {"location": {"lat": -1.286389, "lng": 36.817223}},
++            }],
++        })
++        svc = GoogleGeocodingService()
++        result = svc.geocode("Nairobi")
++        assert result is not None
++        assert result.latitude == -1.286389
++        assert result.longitude == 36.817223
++        assert result.formatted_address == "Nairobi, Kenya"
++
++    @override_settings(GOOGLE_MAPS_API_KEY="test-key")
++    @patch("app.services.geocoding.requests.get")
++    def test_returns_none_on_zero_results(self, mock_get):
++        mock_get.return_value = _mock_response({"status": "ZERO_RESULTS", "results": []})
++        svc = GoogleGeocodingService()
++        assert svc.geocode("nonexistent place xyz") is None
++
++    @override_settings(GOOGLE_MAPS_API_KEY="test-key")
++    @patch("app.services.geocoding.requests.get")
++    def test_returns_none_on_request_exception(self, mock_get):
++        import requests
++        mock_get.side_effect = requests.RequestException("network error")
++        svc = GoogleGeocodingService()
++        assert svc.geocode("Nairobi") is None
++
++
++class TestGoogleRoutingService:
++    @override_settings(GOOGLE_MAPS_API_KEY="")
++    def test_returns_none_without_api_key(self):
++        svc = GoogleRoutingService()
++        assert svc.get_route(0, 0, 1, 1) is None
++
++    @override_settings(GOOGLE_MAPS_API_KEY="test-key")
++    @patch("app.services.routing.requests.get")
++    def test_parses_successful_response(self, mock_get):
++        mock_get.return_value = _mock_response({
++            "status": "OK",
++            "routes": [{
++                "legs": [{
++                    "distance": {"value": 12500},
++                    "duration": {"value": 1500},
++                }]
++            }],
++        })
++        svc = GoogleRoutingService()
++        result = svc.get_route(-1.28, 36.82, -1.30, 36.78)
++        assert result is not None
++        assert result.distance_km == 12.5
++        assert result.estimated_duration_minutes == 25.0
++
++    @override_settings(GOOGLE_MAPS_API_KEY="test-key")
++    @patch("app.services.routing.requests.get")
++    def test_returns_none_on_no_routes(self, mock_get):
++        mock_get.return_value = _mock_response({"status": "ZERO_RESULTS", "routes": []})
++        svc = GoogleRoutingService()
++        assert svc.get_route(0, 0, 1, 1) is None
+-- 
+2.43.0
+
