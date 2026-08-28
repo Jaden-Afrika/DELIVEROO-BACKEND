@@ -5,6 +5,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import AccessToken
+from drf_spectacular.utils import extend_schema, OpenApiExample, OpenApiResponse
 
 from app.exceptions import ValidationError422, ConflictError
 from app.models.enums import ParcelStatus, WeightCategory
@@ -29,7 +30,21 @@ def _serialize_validation(errors):
     return details
 
 
+@extend_schema(
+    description=(
+        "Register a new user account. Public endpoint. Returns a JWT access "
+        "token plus the created user on success. Conflicts on an already-"
+        "registered email."
+    ),
+    request=SignupRequestSerializer,
+    responses={201: OpenApiResponse(description="Created user and JWT access token.")},
+)
 class SignupView(APIView):
+    """Register a new user account.
+
+    Public endpoint. Returns a JWT access token plus the created user on
+    success. Conflicting email addresses return a 409.
+    """
     permission_classes = [~IsAuthenticated]
 
     def post(self, request):
@@ -53,7 +68,20 @@ class SignupView(APIView):
         )
 
 
+@extend_schema(
+    description=(
+        "Log a user in and obtain a JWT access token. Public endpoint. "
+        "Accepts email + password and returns the token plus the user."
+    ),
+    request=LoginRequestSerializer,
+    responses={200: OpenApiResponse(description="User and JWT access token.")},
+)
 class LoginView(APIView):
+    """Log a user in and obtain a JWT access token.
+
+    Public endpoint. Accepts email + password and returns the token plus the
+    user on success.
+    """
     permission_classes = [~IsAuthenticated]
 
     def post(self, request):
@@ -72,21 +100,42 @@ class LoginView(APIView):
         return Response({"access_token": str(token), "user": user.to_dict()}, status=200)
 
 
+@extend_schema(
+    description="Log the current user out. The client should discard the stored token.",
+    request=None,
+    responses={200: OpenApiResponse(description="Logged out.")},
+)
 class LogoutView(APIView):
+    """Log the current user out.
+
+    Requires a valid bearer token. The client should discard the stored token.
+    """
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
         return Response({"message": "Logged out"}, status=200)
 
 
+@extend_schema(
+    description="Return the authenticated user's profile.",
+    request=None,
+    responses={200: OpenApiResponse(description="The authenticated user.")},
+)
 class MeView(APIView):
+    """Return the authenticated user's profile."""
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
         return Response({"user": request.user.to_dict()}, status=200)
 
 
+@extend_schema(
+    description="List all parcels created by the authenticated user.",
+    request=None,
+    responses={200: OpenApiResponse(description="List of the user's parcels.")},
+)
 class ListMyParcelsView(APIView):
+    """List all parcels created by the authenticated user."""
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -94,7 +143,21 @@ class ListMyParcelsView(APIView):
         return Response([p.to_dict() for p in parcels], status=200)
 
 
+@extend_schema(
+    description=(
+        "Create a new parcel delivery. Requires a bearer token. The backend "
+        "quotes a price from the weight category and distance."
+    ),
+    request=CreateParcelRequestSerializer,
+    responses={201: OpenApiResponse(description="Created parcel.")},
+)
 class CreateParcelView(APIView):
+    """Create a new parcel delivery.
+
+    Requires a bearer token. The backend quotes a price from the weight
+    category and distance, and best-effort geocodes pickup/destination for the
+    map. Returns the created parcel.
+    """
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
@@ -164,7 +227,20 @@ def _can_access(parcel, user):
     return parcel is not None and _is_owner_or_admin(parcel, user)
 
 
+@extend_schema(
+    description=(
+        "Get a single parcel by id. Only the owning customer or an admin may "
+        "view it."
+    ),
+    request=None,
+    responses={200: OpenApiResponse(description="The requested parcel.")},
+)
 class ParcelDetailView(APIView):
+    """Get a single parcel by id.
+
+    Only the owning customer or an admin may view it; otherwise a 404 is
+    returned so parcel ids stay unguessable.
+    """
     permission_classes = [IsAuthenticated]
 
     def get(self, request, parcel_id):
@@ -176,7 +252,35 @@ class ParcelDetailView(APIView):
         return Response(parcel.to_dict(), status=200)
 
 
+@extend_schema(
+    description=(
+        "Change the destination of an existing parcel. The backend re-geocodes "
+        "the new destination and re-quotes the price from the updated distance. "
+        "Returns the updated parcel."
+    ),
+    request=UpdateDestinationRequestSerializer,
+    responses={
+        200: OpenApiResponse(
+            description="Parcel with the updated destination.",
+        ),
+        404: OpenApiResponse(
+            description="Parcel not found or not owned by the user.",
+            examples=[OpenApiExample(
+                "Not found",
+                value={"error": {"code": "PARCEL_NOT_FOUND", "message": "Parcel not found."}},
+            )],
+        ),
+        409: OpenApiResponse(
+            description="The parcel is delivered or cancelled and cannot be updated.",
+            examples=[OpenApiExample(
+                "Delivered",
+                value={"error": {"code": "PARCEL_DELIVERED", "message": "Cannot update destination for a delivered parcel."}},
+            )],
+        ),
+    },
+)
 class UpdateDestinationView(APIView):
+    """Change the destination of a parcel (owner or admin)."""
     permission_classes = [IsAuthenticated]
 
     def patch(self, request, parcel_id):
@@ -245,7 +349,35 @@ class UpdateDestinationView(APIView):
         return Response(parcel.to_dict(), status=200)
 
 
+@extend_schema(
+    description=(
+        "Cancel a parcel. Only possible while it is pending or in transit; "
+        "delivered and already-cancelled parcels conflict. Returns the updated "
+        "parcel."
+    ),
+    request=None,
+    responses={
+        200: OpenApiResponse(
+            description="Parcel marked as cancelled.",
+        ),
+        404: OpenApiResponse(
+            description="Parcel not found or not owned by the user.",
+            examples=[OpenApiExample(
+                "Not found",
+                value={"error": {"code": "PARCEL_NOT_FOUND", "message": "Parcel not found."}},
+            )],
+        ),
+        409: OpenApiResponse(
+            description="The parcel is delivered or already cancelled.",
+            examples=[OpenApiExample(
+                "Already cancelled",
+                value={"error": {"code": "PARCEL_CANCELLED", "message": "Parcel is already cancelled."}},
+            )],
+        ),
+    },
+)
 class CancelParcelView(APIView):
+    """Cancel a parcel (owner or admin)."""
     permission_classes = [IsAuthenticated]
 
     def patch(self, request, parcel_id):
@@ -282,7 +414,20 @@ class CancelParcelView(APIView):
         return Response(parcel.to_dict(), status=200)
 
 
+@extend_schema(
+    description=(
+        "Return the chronological status history of a parcel. Only the owning "
+        "customer or an admin may view it."
+    ),
+    request=None,
+    responses={200: OpenApiResponse(description="List of status history entries.")},
+)
 class StatusHistoryView(APIView):
+    """Return the chronological status history of a parcel.
+
+    Each entry records a status transition with its author and note. Only the
+    owning customer or an admin may view it.
+    """
     permission_classes = [IsAuthenticated]
 
     def get(self, request, parcel_id):
@@ -305,7 +450,21 @@ class StatusHistoryView(APIView):
         ], status=200)
 
 
+@extend_schema(
+    description=(
+        "Return live tracking info for a parcel, including pickup/destination "
+        "coordinates, current location, and the most recent status update. "
+        "Only the owning customer or an admin may view it."
+    ),
+    request=None,
+    responses={200: OpenApiResponse(description="Live tracking data for the parcel.")},
+)
 class TrackingView(APIView):
+    """Return live tracking info for a parcel.
+
+    Includes pickup/destination coordinates, the current location, and the most
+    recent status update. Only the owning customer or an admin may view it.
+    """
     permission_classes = [IsAuthenticated]
 
     def get(self, request, parcel_id):
@@ -343,7 +502,13 @@ class TrackingView(APIView):
         )
 
 
+@extend_schema(
+    description="Admin: list all parcels across all customers, newest first.",
+    request=None,
+    responses={200: OpenApiResponse(description="List of all parcels.")},
+)
 class AdminListParcelsView(APIView):
+    """Admin: list all parcels across all customers, newest first."""
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -353,7 +518,20 @@ class AdminListParcelsView(APIView):
         return Response([p.to_dict() for p in parcels], status=200)
 
 
+@extend_schema(
+    description=(
+        "Admin: update a parcel's status. Setting the status to `delivered` "
+        "stamps `delivered_at`. Returns the updated parcel."
+    ),
+    request=AdminUpdateStatusRequestSerializer,
+    responses={200: OpenApiResponse(description="Updated parcel.")},
+)
 class AdminUpdateStatusView(APIView):
+    """Admin: update a parcel's status.
+
+    Setting the status to `delivered` stamps `delivered_at`. Returns the
+    updated parcel.
+    """
     permission_classes = [IsAuthenticated]
 
     def patch(self, request, parcel_id):
@@ -391,7 +569,16 @@ class AdminUpdateStatusView(APIView):
         return Response(parcel.to_dict(), status=200)
 
 
+@extend_schema(
+    description=(
+        "Admin: update the current location of a parcel. Returns the updated "
+        "parcel."
+    ),
+    request=AdminUpdateLocationRequestSerializer,
+    responses={200: OpenApiResponse(description="Updated parcel.")},
+)
 class AdminUpdateLocationView(APIView):
+    """Admin: update the current location of a parcel."""
     permission_classes = [IsAuthenticated]
 
     def patch(self, request, parcel_id):
