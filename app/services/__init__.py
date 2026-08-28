@@ -1,7 +1,7 @@
 from django.conf import settings
 
-from app.services.geocoding import GeocodingService, StubGeocodingService
-from app.services.routing import RoutingService, StubRoutingService
+from app.services.geocoding import GeocodingService, StubGeocodingService, GoogleGeocodingService
+from app.services.routing import RoutingService, StubRoutingService, GoogleRoutingService
 from app.services.notifications import (
     NotificationService,
     StubNotificationService,
@@ -20,14 +20,22 @@ _storage_service: StorageService = None
 def get_geocoding_service() -> GeocodingService:
     global _geocoding_service
     if _geocoding_service is None:
-        _geocoding_service = StubGeocodingService()
+        provider = getattr(settings, "GEOCODING_PROVIDER", "stub")
+        if provider == "google":
+            _geocoding_service = GoogleGeocodingService()
+        else:
+            _geocoding_service = StubGeocodingService()
     return _geocoding_service
 
 
 def get_routing_service() -> RoutingService:
     global _routing_service
     if _routing_service is None:
-        _routing_service = StubRoutingService()
+        provider = getattr(settings, "ROUTING_PROVIDER", "stub")
+        if provider == "google":
+            _routing_service = GoogleRoutingService()
+        else:
+            _routing_service = StubRoutingService()
     return _routing_service
 
 
