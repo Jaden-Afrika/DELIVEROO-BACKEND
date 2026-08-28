@@ -33,13 +33,13 @@ Based on inspection of `https://github.com/Jaden-Afrika/DELIVEROO-FRONTEND` sour
 | PATCH | `/parcels/<id>/destination` | `{destination}` | parcel object |
 | PATCH | `/parcels/<id>/cancel` | — | parcel object |
 | GET | `/parcels/<id>/status-history` | — | `[{id, status, changedByUserId, notes, createdAt}]` |
-| GET | `/parcels/<id>/tracking` | — | 501 Not Implemented |
+| GET | `/parcels/<id>/tracking` | — | tracking object (see below) |
 
 ### Admin
 | Method | Path | Request | Response |
 |--------|------|---------|----------|
 | GET | `/admin/parcels` | — | `[parcel object]` |
-| PATCH | `/admin/parcels/<id>/status` | `{status: pending/in_transit/delivered}` | parcel object |
+| PATCH | `/admin/parcels/<id>/status` | `{status: pending/assigned/in_transit/delivered}` | parcel object |
 | PATCH | `/admin/parcels/<id>/location` | `{currentLocation}` | parcel object |
 
 ## Parcel Object Shape
@@ -50,6 +50,10 @@ Based on inspection of `https://github.com/Jaden-Afrika/DELIVEROO-FRONTEND` sour
   "trackingNumber": "DRV-A1B2C3D4",
   "pickupLocation": "Westlands, Nairobi",
   "destination": "Kilimani, Nairobi",
+  "pickupLatitude": -1.2635,
+  "pickupLongitude": 36.8078,
+  "destinationLatitude": -1.2833,
+  "destinationLongitude": 36.7833,
   "weightCategory": "medium",
   "weight": "Medium (2 - 10kg)",
   "distanceKm": 10.0,
@@ -63,7 +67,8 @@ Based on inspection of `https://github.com/Jaden-Afrika/DELIVEROO-FRONTEND` sour
   "ownerName": "Test User",
   "createdAt": "2026-08-25T10:00:00+00:00",
   "dateCreated": "2026-08-25T10:00:00+00:00",
-  "cancelledAt": "2026-08-25T11:00:00+00:00"
+  "cancelledAt": "2026-08-25T11:00:00+00:00",
+  "deliveredAt": "2026-08-25T12:00:00+00:00"
 }
 ```
 
@@ -75,10 +80,12 @@ Based on inspection of `https://github.com/Jaden-Afrika/DELIVEROO-FRONTEND` sour
 | `trackingNumber` | string | Format: `DRV-{8 hex chars}` |
 | `pickupLocation` | string | Free-text address |
 | `destination` | string | Free-text address, mutable |
+| `pickupLatitude` / `pickupLongitude` | float or `null` | Geocoded when the parcel is created. `null` if geocoding failed or the provider is unavailable — always check for `null` before rendering a marker |
+| `destinationLatitude` / `destinationLongitude` | float or `null` | Geocoded on create, re-geocoded on every destination change. Same `null` caveat as pickup |
 | `weightCategory` | enum | `light`, `medium`, `heavy` |
 | `weight` | string | Human-readable label (e.g. `"Light (0 - 2kg)"`) |
 | `distanceKm` | float | Recalculated on destination change |
-| `estimatedTravelTime` | integer | Minutes, computed from distance (40 km/h avg) |
+| `estimatedTravelTime` | integer | Minutes. Uses the routing provider's real duration when available (set on destination change), otherwise falls back to a `(distanceKm / 40) * 60` estimate |
 | `price` | float | Recalculated on destination change |
 | `currency` | string | Always `"KES"` |
 | `status` | enum | `pending`, `assigned`, `in_transit`, `delivered`, `cancelled` |
@@ -89,6 +96,11 @@ Based on inspection of `https://github.com/Jaden-Afrika/DELIVEROO-FRONTEND` sour
 | `createdAt` | ISO-8601 | Parcel creation timestamp |
 | `dateCreated` | ISO-8601 | Same as `createdAt` (frontend compatibility) |
 | `cancelledAt` | ISO-8601 | Present only after cancellation |
+| `deliveredAt` | ISO-8601 | Present only once an admin sets status to `delivered` |
+
+### Map rendering
+
+Use `pickupLatitude`/`pickupLongitude` and `destinationLatitude`/`destinationLongitude` to place the two markers and draw the connecting line — no client-side geocoding needed. Both pairs can be `null` on a parcel whose addresses failed to geocode (stub provider always succeeds; the real Google provider can fail on a bad address or API error) — the map component should handle a `null` pair gracefully (e.g. skip that marker, or fall back to showing just the address text) rather than assuming coordinates always exist.
 
 ## GET `/parcels/<id>` — Detail Response
 
@@ -145,6 +157,43 @@ Based on inspection of `https://github.com/Jaden-Afrika/DELIVEROO-FRONTEND` sour
 - 401: Unauthenticated
 - 404: `{"error": {"code": "PARCEL_NOT_FOUND", ...}}`
 - 409: `{"error": {"code": "PARCEL_DELIVERED", ...}}` or `{"error": {"code": "PARCEL_CANCELLED", ...}}`
+
+## GET `/parcels/<id>/tracking` — Tracking
+
+**Authorization:** Owner or admin.
+
+**Success (200):**
+```json
+{
+  "parcelId": 1,
+  "status": "in_transit",
+  "pickup": {
+    "label": "Westlands, Nairobi",
+    "latitude": -1.2635,
+    "longitude": 36.8078
+  },
+  "destination": {
+    "label": "Kilimani, Nairobi",
+    "latitude": -1.2833,
+    "longitude": 36.7833
+  },
+  "currentLocation": "Museum Hill, Nairobi",
+  "distanceKm": 10.0,
+  "estimatedTravelTime": 15,
+  "lastUpdatedAt": "2026-08-25T11:30:00+00:00",
+  "lastUpdateNote": "Status changed to in_transit by admin"
+}
+```
+
+`lastUpdatedAt`/`lastUpdateNote` reflect the most recent `parcel_status_history` entry (falls back to the parcel's own `updatedAt` if no history exists yet, which shouldn't happen in practice since creation always writes one).
+
+**Errors:**
+- 401: Unauthenticated
+- 404: `{"error": {"code": "PARCEL_NOT_FOUND", "message": "Parcel not found."}}`
+
+## Email notifications
+
+When an admin updates a parcel's status or current location, the backend sends an email to the parcel owner (subject + plain-text body — no template yet) and records a row in the `notifications` table regardless of whether the email itself succeeds. Controlled by `NOTIFICATION_PROVIDER` (`stub` by default — nothing sent, useful for local dev and tests; `email` — sends via Django's configured `EMAIL_BACKEND`, console backend by default). No frontend-visible API for this yet; the frontend does not currently poll or display a notifications list.
 
 ## Status History
 
