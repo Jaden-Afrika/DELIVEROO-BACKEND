@@ -1,7 +1,7 @@
 from django.conf import settings
 
-from app.services.geocoding import GeocodingService, StubGeocodingService, GoogleGeocodingService
-from app.services.routing import RoutingService, StubRoutingService, GoogleRoutingService
+from app.services.geocoding import GeocodingService, OSMGeocodingService, StubGeocodingService
+from app.services.routing import OSMRoutingService, RoutingService, StubRoutingService
 from app.services.notifications import (
     NotificationService,
     StubNotificationService,
@@ -20,9 +20,9 @@ _storage_service: StorageService = None
 def get_geocoding_service() -> GeocodingService:
     global _geocoding_service
     if _geocoding_service is None:
-        provider = getattr(settings, "GEOCODING_PROVIDER", "stub")
-        if provider == "google":
-            _geocoding_service = GoogleGeocodingService()
+        provider = getattr(settings, "GEOCODING_PROVIDER", "osm")
+        if provider == "osm":
+            _geocoding_service = OSMGeocodingService()
         else:
             _geocoding_service = StubGeocodingService()
     return _geocoding_service
@@ -31,9 +31,9 @@ def get_geocoding_service() -> GeocodingService:
 def get_routing_service() -> RoutingService:
     global _routing_service
     if _routing_service is None:
-        provider = getattr(settings, "ROUTING_PROVIDER", "stub")
-        if provider == "google":
-            _routing_service = GoogleRoutingService()
+        provider = getattr(settings, "ROUTING_PROVIDER", "osm")
+        if provider == "osm":
+            _routing_service = OSMRoutingService()
         else:
             _routing_service = StubRoutingService()
     return _routing_service
