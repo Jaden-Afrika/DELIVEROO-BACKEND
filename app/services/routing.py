@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from typing import Optional
 
 import requests
-from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
@@ -34,47 +33,37 @@ class StubRoutingService(RoutingService):
         return RouteResult(distance_km=10.0, estimated_duration_minutes=25.0)
 
 
-class GoogleRoutingService(RoutingService):
-    """Real driving distance/duration via the Google Directions API.
+class OSMRoutingService(RoutingService):
+    """Best-effort driving routes through the public OSRM demo server."""
 
-    Requires GOOGLE_MAPS_API_KEY to be set. Like GoogleGeocodingService,
-    returns None on any failure rather than raising, since callers treat
-    a missing route as non-fatal and fall back to whatever distance/price
-    was already on the parcel.
-    """
-
-    ENDPOINT = "https://maps.googleapis.com/maps/api/directions/json"
+    ENDPOINT = "https://router.project-osrm.org/route/v1/driving"
 
     def get_route(
         self, origin_lat: float, origin_lng: float,
         dest_lat: float, dest_lng: float,
     ) -> Optional[RouteResult]:
-        api_key = getattr(settings, "GOOGLE_MAPS_API_KEY", "")
-        if not api_key:
-            logger.warning("GOOGLE_MAPS_API_KEY is not set; cannot compute route")
-            return None
         try:
-            resp = requests.get(
-                self.ENDPOINT,
-                params={
-                    "origin": f"{origin_lat},{origin_lng}",
-                    "destination": f"{dest_lat},{dest_lng}",
-                    "key": api_key,
-                },
+            response = requests.get(
+                f"{self.ENDPOINT}/{origin_lng},{origin_lat};{dest_lng},{dest_lat}",
+                params={"overview": "false"},
                 timeout=5,
             )
-            resp.raise_for_status()
-            data = resp.json()
-        except requests.RequestException as exc:
-            logger.warning("Directions request failed: %s", exc)
+            response.raise_for_status()
+            data = response.json()
+        except (requests.RequestException, ValueError) as exc:
+            logger.warning("OSRM routing request failed: %s", exc)
             return None
 
-        if data.get("status") != "OK" or not data.get("routes"):
-            logger.warning("Directions failed: status=%s", data.get("status"))
-            return None
+        try:
+            if data.get("code") != "Ok" or not data.get("routes"):
+                logger.warning("OSRM routing failed: code=%s", data.get("code"))
+                return None
 
-        leg = data["routes"][0]["legs"][0]
-        return RouteResult(
-            distance_km=leg["distance"]["value"] / 1000,
-            estimated_duration_minutes=leg["duration"]["value"] / 60,
-        )
+            route = data["routes"][0]
+            return RouteResult(
+                distance_km=float(route["distance"]) / 1000,
+                estimated_duration_minutes=float(route["duration"]) / 60,
+            )
+        except (AttributeError, KeyError, TypeError, ValueError, IndexError) as exc:
+            logger.warning("OSRM returned an invalid route: %s", exc)
+            return None
