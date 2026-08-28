@@ -3,6 +3,7 @@ import os
 from datetime import timedelta
 from pathlib import Path
 
+import dj_database_url
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -60,16 +61,20 @@ WSGI_APPLICATION = "config.wsgi.application"
 STATIC_URL = "/static/"
 STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
 
-# Database
+# Database. DATABASE_URL takes precedence; the component variables preserve a
+# working local PostgreSQL fallback for development.
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.environ.get("POSTGRES_DB", "deliveroo_dev"),
-        "USER": os.environ.get("POSTGRES_USER", "deliveroo"),
-        "PASSWORD": os.environ.get("POSTGRES_PASSWORD", "deliveroo"),
-        "HOST": os.environ.get("POSTGRES_HOST", "localhost"),
-        "PORT": os.environ.get("POSTGRES_PORT", "5432"),
-    }
+    "default": dj_database_url.config(
+        default=(
+            f"postgresql://{os.environ.get('POSTGRES_USER', 'deliveroo')}:"
+            f"{os.environ.get('POSTGRES_PASSWORD', 'deliveroo')}@"
+            f"{os.environ.get('POSTGRES_HOST', 'localhost')}:"
+            f"{os.environ.get('POSTGRES_PORT', '5432')}/"
+            f"{os.environ.get('POSTGRES_DB', 'deliveroo_dev')}"
+        ),
+        conn_max_age=600,
+        ssl_require="sslmode=require" in os.environ.get("DATABASE_URL", ""),
+    )
 }
 
 # Password validation
