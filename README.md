@@ -32,6 +32,20 @@ python manage.py runserver 0.0.0.0:5000
 
 Visit `http://localhost:5000/` — returns `{"status": "ok", "service": "deliveroo-backend"}`.
 
+## Environment and deployment
+
+`DATABASE_URL` is the preferred database setting and is used when present;
+the `POSTGRES_*` variables are only a local-development fallback. Keep `.env`
+out of version control (it is ignored) and rotate any credential that has been
+shared outside its intended audience.
+
+For local development, Vite runs at `http://localhost:5173`, so set
+`FRONTEND_ORIGIN` to that exact value. In production, set
+`FRONTEND_ORIGIN` to the deployed frontend's real HTTPS origin and
+`DJANGO_ALLOWED_HOSTS` to the deployed backend hostname(s), without ports.
+Do not use `localhost` for either production setting. Add the production API
+URL here once it has been deployed.
+
 ### Health
 
 - `GET /` — `{"status": "ok", "service": "deliveroo-backend"}`
