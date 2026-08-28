@@ -314,7 +314,33 @@ class TrackingView(APIView):
             return Response(
                 {"error": {"code": "PARCEL_NOT_FOUND", "message": "Parcel not found."}}, status=404
             )
-        return Response({"message": "Not implemented", "locations": []}, status=501)
+
+        last_update = (
+            ParcelStatusHistory.objects.filter(parcel_id=parcel.id).order_by("-created_at").first()
+        )
+
+        return Response(
+            {
+                "parcelId": parcel.id,
+                "status": parcel.status,
+                "pickup": {
+                    "label": parcel.pickup_location,
+                    "latitude": float(parcel.pickup_latitude) if parcel.pickup_latitude is not None else None,
+                    "longitude": float(parcel.pickup_longitude) if parcel.pickup_longitude is not None else None,
+                },
+                "destination": {
+                    "label": parcel.destination,
+                    "latitude": float(parcel.destination_latitude) if parcel.destination_latitude is not None else None,
+                    "longitude": float(parcel.destination_longitude) if parcel.destination_longitude is not None else None,
+                },
+                "currentLocation": parcel.current_location,
+                "distanceKm": float(parcel.distance_km) if parcel.distance_km is not None else None,
+                "estimatedTravelTime": parcel._estimated_travel_minutes(),
+                "lastUpdatedAt": Parcel._iso(last_update.created_at) if last_update else Parcel._iso(parcel.updated_at),
+                "lastUpdateNote": last_update.notes if last_update else None,
+            },
+            status=200,
+        )
 
 
 class AdminListParcelsView(APIView):
