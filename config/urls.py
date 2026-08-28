@@ -2,6 +2,18 @@
 from django.contrib import admin
 from django.http import JsonResponse
 from django.urls import include, path
+from drf_spectacular.renderers import OpenApiJsonRenderer
+from drf_spectacular.views import (
+    SpectacularAPIView,
+    SpectacularRedocView,
+    SpectacularSwaggerView,
+)
+
+
+class JSONSchemaView(SpectacularAPIView):
+    """Serve the generated OpenAPI schema as JSON (not YAML)."""
+
+    renderer_classes = [OpenApiJsonRenderer]
 
 
 def health(request):
@@ -47,4 +59,17 @@ urlpatterns = [
     path("", health),
     path("health", health),
     path("openapi.json", openapi),
+    # OpenAPI / Swagger docs (drf-spectacular, auto-generated)
+    path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
+    path("api/schema/openapi.json", JSONSchemaView.as_view(), name="schema-json"),
+    path(
+        "api/docs/",
+        SpectacularSwaggerView.as_view(url_name="schema-json"),
+        name="swagger-ui",
+    ),
+    path(
+        "api/redoc/",
+        SpectacularRedocView.as_view(url_name="schema-json"),
+        name="redoc",
+    ),
 ]

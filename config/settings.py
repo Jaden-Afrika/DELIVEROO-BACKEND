@@ -103,9 +103,14 @@ REST_FRAMEWORK = {
 }
 
 SPECTACULAR_SETTINGS = {
-    "TITLE": "Deliveroo Backend API",
-    "DESCRIPTION": "Courier parcel delivery API",
+    "TITLE": "Deliveroo API",
+    "DESCRIPTION": (
+        "Courier parcel delivery API. Register or log in to receive a JWT "
+        "bearer token (returned as `access_token`), then send it as an "
+        "`Authorization: Bearer <token>` header on protected endpoints."
+    ),
     "VERSION": "0.1.0",
+    "COMPONENT_SPLIT_REQUEST": True,
 }
 
 # CORS
