@@ -114,19 +114,12 @@ CORS_ALLOWED_ORIGINS = [
     o.strip() for o in FRONTEND_ORIGIN.split(",") if o.strip()
 ] or ["http://localhost:5173"]
 
-# Provider toggles (kept from Flask config)
-# Set to "google" to use real Google Maps geocoding/directions instead of
-# the deterministic stubs - requires GOOGLE_MAPS_API_KEY below.
-GEOCODING_PROVIDER = os.environ.get("GEOCODING_PROVIDER", "stub")
-ROUTING_PROVIDER = os.environ.get("ROUTING_PROVIDER", "stub")
+# Provider toggles. OpenStreetMap's public Nominatim and OSRM services are
+# the default. Set either provider to "stub" for deterministic offline work.
+GEOCODING_PROVIDER = os.environ.get("GEOCODING_PROVIDER", "osm")
+ROUTING_PROVIDER = os.environ.get("ROUTING_PROVIDER", "osm")
 PAYMENT_PROVIDER = os.environ.get("PAYMENT_PROVIDER", "stub")
 STORAGE_PROVIDER = os.environ.get("STORAGE_PROVIDER", "local")
-
-# Server-side key for the Google Geocoding/Directions APIs. This is
-# separate from the frontend's VITE_GOOGLE_MAPS_API_KEY (that one is a
-# browser-restricted key for rendering the map) - this one should be an
-# IP-restricted server key with Geocoding API and Directions API enabled.
-GOOGLE_MAPS_API_KEY = os.environ.get("GOOGLE_MAPS_API_KEY", "")
 
 # Set NOTIFICATION_PROVIDER=email to send real emails when an admin changes
 # a parcel's status or current location. Defaults to "stub" so local dev
