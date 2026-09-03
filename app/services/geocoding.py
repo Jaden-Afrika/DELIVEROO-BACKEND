@@ -69,7 +69,12 @@ class OSMGeocodingService(GeocodingService):
             self._respect_rate_limit()
             response = requests.get(
                 self.ENDPOINT,
-                params={"q": address_text, "format": "json", "limit": 1},
+                params={
+                    "q": address_text,
+                    "format": "json",
+                    "limit": 1,
+                    "countrycodes": "ke",
+                },
                 headers={"User-Agent": self.USER_AGENT},
                 timeout=5,
             )

@@ -32,7 +32,12 @@ class TestOSMGeocodingService:
         assert result.formatted_address == "Nairobi, Kenya"
         mock_get.assert_called_once_with(
             OSMGeocodingService.ENDPOINT,
-            params={"q": "Nairobi", "format": "json", "limit": 1},
+            params={
+                "q": "Nairobi",
+                "format": "json",
+                "limit": 1,
+                "countrycodes": "ke",
+            },
             headers={"User-Agent": OSMGeocodingService.USER_AGENT},
             timeout=5,
         )
