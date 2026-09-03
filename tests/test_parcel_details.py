@@ -10,7 +10,7 @@ def _create_parcel(client, auth_header, **overrides):
     payload = {
         "pickupLocation": "Westlands, Nairobi",
         "destination": "Kilimani, Nairobi",
-        "weightCategory": "medium",
+        "weightKg": 10,
         "distanceKm": 10.0,
     }
     payload.update(overrides)
@@ -51,12 +51,12 @@ class TestGetParcelDetail:
         resp = client.get("/parcels/99999", **auth_header)
         assert resp.status_code == 404
 
-    def test_detail_contains_weight_category(self, client, auth_header, seed_pricing_rules, seed_users):
-        parcel = _create_parcel(client, auth_header, weightCategory="heavy")
+    def test_detail_contains_weight_and_vehicle_category(self, client, auth_header, seed_pricing_rules, seed_users):
+        parcel = _create_parcel(client, auth_header, weightKg=51)
         resp = client.get(f"/parcels/{parcel['id']}", **auth_header)
         data = resp.json()
-        assert data["weightCategory"] == "heavy"
-        assert "Heavy" in data["weight"]
+        assert data["weightKg"] == 51
+        assert data["vehicleCategory"] == "lorry"
 
     def test_detail_contains_valid_created_at(self, client, auth_header, seed_pricing_rules, seed_users):
         parcel = _create_parcel(client, auth_header)
@@ -72,7 +72,7 @@ class TestGetParcelDetail:
         assert ISO_RE.match(data["dateCreated"])
 
     def test_detail_contains_price_and_currency(self, client, auth_header, seed_pricing_rules, seed_users):
-        parcel = _create_parcel(client, auth_header, weightCategory="light", distanceKm=5.0)
+        parcel = _create_parcel(client, auth_header, weightKg=2, distanceKm=5.0)
         resp = client.get(f"/parcels/{parcel['id']}", **auth_header)
         data = resp.json()
         assert data["price"] == 225  # 150 + 15*5

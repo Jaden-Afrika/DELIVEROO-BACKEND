@@ -2,7 +2,7 @@ def _create_parcel(client, auth_header, **overrides):
     payload = {
         "pickupLocation": "Westlands, Nairobi",
         "destination": "Kilimani, Nairobi",
-        "weightCategory": "medium",
+        "weightKg": 10,
         "distanceKm": 10.0,
     }
     payload.update(overrides)

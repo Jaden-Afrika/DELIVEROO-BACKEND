@@ -27,6 +27,12 @@ class WeightCategory(enum.Enum):
     heavy = "heavy"
 
 
+class VehicleCategory(enum.Enum):
+    bike = "bike"
+    car = "car"
+    lorry = "lorry"
+
+
 class PaymentStatus(enum.Enum):
     pending = "pending"
     completed = "completed"

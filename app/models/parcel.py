@@ -4,7 +4,7 @@ from app.utils import utcnow
 
 from django.db import models
 
-from app.models.enums import ParcelStatus, WeightCategory
+from app.models.enums import ParcelStatus, VehicleCategory
 
 
 def _default_tracking_number():
@@ -27,10 +27,10 @@ class Parcel(models.Model):
         "app.Address", on_delete=models.SET_NULL, null=True, blank=True,
         db_column="destination_address_id", related_name="+",
     )
-    weight_category = models.CharField(
-        max_length=20, choices=[(c.value, c.name) for c in WeightCategory]
+    weight_kg = models.FloatField()
+    vehicle_category = models.CharField(
+        max_length=20, choices=[(c.value, c.name) for c in VehicleCategory]
     )
-    weight_kg = models.DecimalField(max_digits=10, decimal_places=3, null=True, blank=True)
     description = models.TextField(null=True, blank=True)
     pickup_location = models.CharField(max_length=255)
     destination = models.CharField(max_length=255)
@@ -77,8 +77,12 @@ class Parcel(models.Model):
             "pickupLongitude": float(self.pickup_longitude) if self.pickup_longitude is not None else None,
             "destinationLatitude": float(self.destination_latitude) if self.destination_latitude is not None else None,
             "destinationLongitude": float(self.destination_longitude) if self.destination_longitude is not None else None,
-            "weightCategory": self.weight_category,
-            "weight": self._weight_label(),
+            "weightKg": self.weight_kg,
+            "vehicleCategory": self.vehicle_category,
+            # Keep responses compatible with the frontend's existing parcel
+            # shape while API consumers move to camelCase.
+            "weight": self.weight_kg,
+            "vehicle_category": self.vehicle_category,
             "distanceKm": float(self.distance_km) if self.distance_km is not None else None,
             "estimatedTravelTime": self._estimated_travel_minutes(),
             "price": float(self.quoted_price) if self.quoted_price is not None else None,
@@ -113,11 +117,3 @@ class Parcel(models.Model):
         distance = float(self.distance_km)
         avg_speed_kmh = 40.0
         return round((distance / avg_speed_kmh) * 60)
-
-    def _weight_label(self):
-        labels = {
-            WeightCategory.light.value: "Light (0 - 2kg)",
-            WeightCategory.medium.value: "Medium (2 - 10kg)",
-            WeightCategory.heavy.value: "Heavy (10kg+)",
-        }
-        return labels.get(self.weight_category, self.weight_category)

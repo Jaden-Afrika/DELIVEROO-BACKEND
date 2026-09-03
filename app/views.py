@@ -7,7 +7,7 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import AccessToken
 
 from app.exceptions import ValidationError422, ConflictError
-from app.models.enums import ParcelStatus, WeightCategory
+from app.models.enums import ParcelStatus
 from app.models import Parcel, ParcelStatusHistory, User
 from app.serializers import (
     SignupRequestSerializer,
@@ -19,6 +19,7 @@ from app.serializers import (
 )
 from app.services.auth import create_user, authenticate_user
 from app.services.pricing import calculate_price
+from app.services.vehicle import get_vehicle_category
 from app.services import get_geocoding_service, get_routing_service, get_notification_service
 
 
@@ -103,12 +104,14 @@ class CreateParcelView(APIView):
             raise ValidationError422(_serialize_validation(serializer.errors))
 
         data = serializer.validated_data
-        wc = data["weightCategory"]
-        pricing = calculate_price(wc, data["distanceKm"])
+        weight_kg = data["weight_kg"]
+        vehicle_category = get_vehicle_category(weight_kg)
+        pricing = calculate_price(weight_kg, data["distanceKm"])
 
         parcel = Parcel(
             customer_id=request.user.id,
-            weight_category=wc,
+            weight_kg=weight_kg,
+            vehicle_category=vehicle_category,
             pickup_location=data["pickupLocation"],
             destination=data["destination"],
             distance_km=data["distanceKm"],
@@ -218,7 +221,7 @@ class UpdateDestinationView(APIView):
                 if route:
                     parcel.distance_km = route.distance_km
                     parcel.duration_minutes = route.estimated_duration_minutes
-                    pricing = calculate_price(parcel.weight_category, route.distance_km)
+                    pricing = calculate_price(parcel.weight_kg, route.distance_km)
                     parcel.quoted_price = pricing["total"]
                     parcel.currency = pricing["currency"]
 

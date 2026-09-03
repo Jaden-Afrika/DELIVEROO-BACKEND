@@ -16,7 +16,7 @@ class TestAdminUpdateStatus:
     def test_update_status(self, client, admin_header, auth_header, seed_pricing_rules, seed_users):
         create_resp = client.post("/parcels", {
             "pickupLocation": "A", "destination": "B",
-            "weightCategory": "light", "distanceKm": 5,
+            "weightKg": 2, "distanceKm": 5,
         }, **auth_header, format="json")
         parcel_id = create_resp.json()["id"]
         resp = client.patch(
@@ -30,7 +30,7 @@ class TestAdminUpdateStatus:
     def test_non_admin_cannot_update(self, client, auth_header, seed_pricing_rules, seed_users):
         create_resp = client.post("/parcels", {
             "pickupLocation": "A", "destination": "B",
-            "weightCategory": "light", "distanceKm": 5,
+            "weightKg": 2, "distanceKm": 5,
         }, **auth_header, format="json")
         parcel_id = create_resp.json()["id"]
         resp = client.patch(
@@ -45,7 +45,7 @@ class TestAdminUpdateLocation:
     def test_update_location(self, client, admin_header, auth_header, seed_pricing_rules, seed_users):
         create_resp = client.post("/parcels", {
             "pickupLocation": "A", "destination": "B",
-            "weightCategory": "light", "distanceKm": 5,
+            "weightKg": 2, "distanceKm": 5,
         }, **auth_header, format="json")
         parcel_id = create_resp.json()["id"]
         resp = client.patch(

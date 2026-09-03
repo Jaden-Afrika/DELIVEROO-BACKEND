@@ -5,7 +5,7 @@ from app.models import (
 )
 from app.models.enums import (
     UserRole, DriverAvailabilityStatus, ParcelStatus,
-    WeightCategory, PaymentStatus,
+    WeightCategory, VehicleCategory, PaymentStatus,
 )
 
 
@@ -40,7 +40,8 @@ def test_parcel_model_fields():
     assert "customer" in cols
     assert "pickup_location" in cols
     assert "destination" in cols
-    assert "weight_category" in cols
+    assert "weight_kg" in cols
+    assert "vehicle_category" in cols
     assert "distance_km" in cols
     assert "quoted_price" in cols
     assert "status" in cols
@@ -50,19 +51,20 @@ def test_parcel_model_fields():
 def test_parcel_to_dict_fields():
     parcel = Parcel(
         id=1, customer_id=1, pickup_location="A", destination="B",
-        weight_category=WeightCategory.medium.value, distance_km=10, quoted_price=350,
+        weight_kg=10, vehicle_category=VehicleCategory.car.value, distance_km=10, quoted_price=350,
         currency="KES", status=ParcelStatus.pending.value,
     )
     d = parcel.to_dict()
     assert "pickupLocation" in d
     assert "destination" in d
-    assert "weightCategory" in d
+    assert "weightKg" in d
+    assert "vehicleCategory" in d
     assert "price" in d
     assert "status" in d
     assert "createdBy" in d
     assert "ownerId" in d
-    assert d["weightCategory"] == "medium"
-    assert d["weight"] == "Medium (2 - 10kg)"
+    assert d["weightKg"] == 10
+    assert d["vehicleCategory"] == "car"
 
 
 def test_all_models_importable():
@@ -88,6 +90,9 @@ def test_enum_values():
     assert WeightCategory.light.value == "light"
     assert WeightCategory.medium.value == "medium"
     assert WeightCategory.heavy.value == "heavy"
+    assert VehicleCategory.bike.value == "bike"
+    assert VehicleCategory.car.value == "car"
+    assert VehicleCategory.lorry.value == "lorry"
     assert PaymentStatus.pending.value == "pending"
     assert PaymentStatus.completed.value == "completed"
     assert DriverAvailabilityStatus.available.value == "available"
