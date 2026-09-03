@@ -9,4 +9,4 @@ COPY . .
 
 RUN python manage.py collectstatic --noinput || true
 
-CMD sh -c 'python manage.py migrate && gunicorn --bind 0.0.0.0:$PORT config.wsgi:application'
+CMD sh -c 'python manage.py migrate && python manage.py regeocode_parcels --apply && gunicorn --bind 0.0.0.0:$PORT config.wsgi:application'
