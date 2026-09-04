@@ -44,6 +44,12 @@ class CreateParcelRequestSerializer(serializers.Serializer):
 class UpdateDestinationRequestSerializer(serializers.Serializer):
     destination = serializers.CharField(min_length=1, max_length=255)
 
+    def validate_destination(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError("Destination must not be blank.")
+        return value
+
 
 class AdminUpdateStatusRequestSerializer(serializers.Serializer):
     status = serializers.ChoiceField(choices=["pending", "assigned", "in_transit", "delivered"])

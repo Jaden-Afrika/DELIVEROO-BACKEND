@@ -163,8 +163,8 @@ class TestUpdateDestination:
             {"destination": ""},
             **auth_header, format="json",
         )
-        assert resp.status_code == 422
-        assert resp.json()["error"]["code"] == "VALIDATION_ERROR"
+        assert resp.status_code == 400
+        assert resp.json()["error"]["code"] == "INVALID_DESTINATION"
         assert "details" in resp.json()["error"]
 
     def test_non_owner_cannot_change_destination(self, client, auth_header, other_header, seed_pricing_rules, seed_users):
@@ -174,7 +174,7 @@ class TestUpdateDestination:
             {"destination": "New Place"},
             **other_header, format="json",
         )
-        assert resp.status_code == 404
+        assert resp.status_code == 403
 
     def test_same_destination_no_change(self, client, auth_header, seed_pricing_rules, seed_users):
         parcel = _create_parcel(client, auth_header)

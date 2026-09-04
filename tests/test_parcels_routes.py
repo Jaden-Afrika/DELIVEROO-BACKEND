@@ -157,7 +157,13 @@ class TestUpdateDestination:
             format="json",
         )
         assert resp.status_code == 200
-        assert resp.json()["destination"] == "New Destination"
+        data = resp.json()
+        assert data["destination"] == "New Destination"
+        assert data["distanceKm"] == 10.0
+        assert data["estimatedTravelTime"] == 25
+        assert data["price"] == 450
+        assert data["destinationLatitude"] == -1.2921
+        assert data["destinationLongitude"] == 36.8219
 
     def test_update_other_users_parcel_destination(self, client, auth_header, other_header, seed_pricing_rules, seed_users):
         create_resp = client.post("/parcels", {
@@ -171,7 +177,45 @@ class TestUpdateDestination:
             **other_header,
             format="json",
         )
+        assert resp.status_code == 403
+
+    def test_update_missing_parcel_destination(self, client, auth_header, seed_users):
+        resp = client.patch(
+            "/parcels/99999/destination",
+            {"destination": "New Destination"},
+            **auth_header,
+            format="json",
+        )
         assert resp.status_code == 404
+
+    def test_update_destination_rejects_blank_value(self, client, auth_header, seed_pricing_rules, seed_users):
+        create_resp = client.post("/parcels", {
+            "pickupLocation": "A", "destination": "B",
+            "weightKg": 2, "distanceKm": 5,
+        }, **auth_header, format="json")
+        resp = client.patch(
+            f"/parcels/{create_resp.json()['id']}/destination",
+            {"destination": "   "},
+            **auth_header,
+            format="json",
+        )
+        assert resp.status_code == 400
+
+    def test_update_destination_rejects_unresolvable_value(self, client, auth_header, seed_pricing_rules, seed_users, monkeypatch):
+        from app import views
+
+        create_resp = client.post("/parcels", {
+            "pickupLocation": "A", "destination": "B",
+            "weightKg": 2, "distanceKm": 5,
+        }, **auth_header, format="json")
+        monkeypatch.setattr(views.get_geocoding_service(), "geocode", lambda value: None)
+        resp = client.patch(
+            f"/parcels/{create_resp.json()['id']}/destination",
+            {"destination": "Unknown Place"},
+            **auth_header,
+            format="json",
+        )
+        assert resp.status_code == 400
 
     def test_update_destination_on_delivered_parcel(self, client, auth_header, admin_header, seed_pricing_rules, seed_users):
         create_resp = client.post("/parcels", {
@@ -196,3 +240,19 @@ class TestUpdateDestination:
 
         check = client.get(f"/parcels/{parcel_id}", **auth_header)
         assert check.json()["destination"] == "B"  # unchanged
+
+    def test_update_destination_on_cancelled_parcel(self, client, auth_header, seed_pricing_rules, seed_users):
+        create_resp = client.post("/parcels", {
+            "pickupLocation": "A", "destination": "B",
+            "weightKg": 2, "distanceKm": 5,
+        }, **auth_header, format="json")
+        parcel_id = create_resp.json()["id"]
+        client.patch(f"/parcels/{parcel_id}/cancel", **auth_header, format="json")
+
+        resp = client.patch(
+            f"/parcels/{parcel_id}/destination",
+            {"destination": "Too Late"},
+            **auth_header,
+            format="json",
+        )
+        assert resp.status_code == 409

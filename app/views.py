@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 
+from django.db import transaction
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -288,9 +289,13 @@ class UpdateDestinationView(APIView):
 
     def patch(self, request, parcel_id):
         parcel = _get_parcel_or_none(parcel_id)
-        if not _can_access(parcel, request.user):
+        if parcel is None:
             return Response(
                 {"error": {"code": "PARCEL_NOT_FOUND", "message": "Parcel not found."}}, status=404
+            )
+        if not _can_access(parcel, request.user):
+            return Response(
+                {"error": {"code": "PARCEL_FORBIDDEN", "message": "You do not own this parcel."}}, status=403
             )
 
         if parcel.status == ParcelStatus.delivered.value:
@@ -304,7 +309,16 @@ class UpdateDestinationView(APIView):
 
         serializer = UpdateDestinationRequestSerializer(data=request.data)
         if not serializer.is_valid():
-            raise ValidationError422(_serialize_validation(serializer.errors))
+            return Response(
+                {
+                    "error": {
+                        "code": "INVALID_DESTINATION",
+                        "message": "A valid destination is required.",
+                        "details": _serialize_validation(serializer.errors),
+                    }
+                },
+                status=400,
+            )
 
         new_destination = serializer.validated_data["destination"]
         if new_destination.strip() == (parcel.destination or "").strip():
@@ -316,33 +330,45 @@ class UpdateDestinationView(APIView):
 
             pickup_geo = geocoder.geocode(parcel.pickup_location)
             dest_geo = geocoder.geocode(new_destination)
-
-            if pickup_geo and dest_geo:
-                route = router.get_route(
-                    pickup_geo.latitude, pickup_geo.longitude,
-                    dest_geo.latitude, dest_geo.longitude,
+            if dest_geo is None:
+                return Response(
+                    {"error": {"code": "INVALID_DESTINATION", "message": "Destination could not be located."}},
+                    status=400,
                 )
-                if route:
-                    parcel.distance_km = route.distance_km
-                    parcel.duration_minutes = route.estimated_duration_minutes
-                    pricing = calculate_price(parcel.weight_kg, route.distance_km)
-                    parcel.quoted_price = pricing["total"]
-                    parcel.currency = pricing["currency"]
+            if pickup_geo is None:
+                return Response(
+                    {"error": {"code": "ROUTE_UNAVAILABLE", "message": "The pickup location could not be located."}},
+                    status=400,
+                )
 
-            parcel.destination = new_destination
-            if dest_geo:
+            route = router.get_route(
+                pickup_geo.latitude, pickup_geo.longitude,
+                dest_geo.latitude, dest_geo.longitude,
+            )
+            if route is None:
+                return Response(
+                    {"error": {"code": "ROUTE_UNAVAILABLE", "message": "A route could not be calculated for this destination."}},
+                    status=400,
+                )
+
+            pricing = calculate_price(parcel.weight_kg, route.distance_km)
+            with transaction.atomic():
+                parcel.distance_km = route.distance_km
+                parcel.duration_minutes = route.estimated_duration_minutes
+                parcel.quoted_price = pricing["total"]
+                parcel.currency = pricing["currency"]
+                parcel.destination = new_destination
                 parcel.destination_latitude = dest_geo.latitude
                 parcel.destination_longitude = dest_geo.longitude
                 parcel.current_location = dest_geo.formatted_address
+                parcel.save()
 
-            parcel.save()
-
-            ParcelStatusHistory.objects.create(
-                parcel=parcel,
-                status=parcel.status,
-                changed_by_user_id=request.user.id,
-                notes=f"Destination changed to: {new_destination}",
-            )
+                ParcelStatusHistory.objects.create(
+                    parcel=parcel,
+                    status=parcel.status,
+                    changed_by_user_id=request.user.id,
+                    notes=f"Destination changed to: {new_destination}",
+                )
         except Exception:
             return Response(
                 {"error": {"code": "UPDATE_FAILED", "message": "Failed to update destination."}},
