@@ -12,7 +12,7 @@ class TestCreateParcel:
         assert data["destination"] == "Kilimani, Nairobi"
         assert data["weightKg"] == 10
         assert data["vehicleCategory"] == "car"
-        assert data["price"] == 600  # 350 + 25*10
+        assert data["price"] == 1650  # 150 + (15*10*10)
         assert data["status"] == "pending"
         assert "id" in data
 

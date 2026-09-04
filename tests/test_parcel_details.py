@@ -75,7 +75,7 @@ class TestGetParcelDetail:
         parcel = _create_parcel(client, auth_header, weightKg=2, distanceKm=5.0)
         resp = client.get(f"/parcels/{parcel['id']}", **auth_header)
         data = resp.json()
-        assert data["price"] == 225  # 150 + 15*5
+        assert data["price"] == 300  # 150 + (15*5*2)
         assert data["currency"] == "KES"
 
     def test_detail_contains_estimated_travel_time(self, client, auth_header, seed_pricing_rules, seed_users):

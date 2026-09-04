@@ -45,7 +45,7 @@ def get_active_pricing_rule(weight_category) -> Optional[PricingRule]:
 def calculate_price(weight_kg: float, distance_km: float) -> dict:
     weight = Decimal(str(weight_kg))
     vehicle_category = get_vehicle_category(weight_kg)
-    rule = get_active_pricing_rule(get_pricing_weight_category(weight_kg))
+    rule = get_active_pricing_rule("light")
     if rule is None:
         return {
             "base_fee": Decimal("0"),
