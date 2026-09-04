@@ -8,20 +8,20 @@ def test_calculate_price_light(seed_pricing_rules):
     assert result["rule_found"] is True
     assert result["base_fee"] == 150
     assert result["per_km_rate"] == 15
-    assert result["total"] == 300  # 150 + (15 * 10)
+    assert result["total"] == 450  # 150 + (15 * 10 * 2)
     assert result["currency"] == "KES"
 
 
 def test_calculate_price_medium(seed_pricing_rules):
     result = calculate_price(10.0, 20.0)
     assert result["rule_found"] is True
-    assert result["total"] == 850  # 350 + (25 * 20)
+    assert result["total"] == 5350  # 350 + (25 * 20 * 10)
 
 
 def test_calculate_price_heavy(seed_pricing_rules):
     result = calculate_price(51.0, 5.0)
     assert result["rule_found"] is True
-    assert result["total"] == 900  # 700 + (40 * 5)
+    assert result["total"] == 10900  # 700 + (40 * 5 * 51)
 
 
 def test_calculate_price_no_rules(db):
@@ -58,8 +58,16 @@ def test_pricing_tiers_remain_independent_of_vehicle_categories():
 def test_bike_parcel_uses_medium_price_when_above_two_kg(seed_pricing_rules):
     result = calculate_price(4.0, 10.0)
     assert result["vehicle_category"] == "bike"
-    assert result["total"] == 600  # 350 + (25 * 10)
+    assert result["total"] == 1350  # 350 + (25 * 10 * 4)
 
 
 def test_price_rounding_matches_frontend_estimate(seed_pricing_rules):
-    assert calculate_price(4.0, 5.5)["total"] == 488
+    assert calculate_price(4.0, 5.5)["total"] == 900
+
+
+def test_price_increases_proportionally_with_weight(seed_pricing_rules):
+    one_kg = calculate_price(1.0, 10.0)
+    two_kg = calculate_price(2.0, 10.0)
+
+    assert one_kg["total"] == 300
+    assert two_kg["total"] == 450
